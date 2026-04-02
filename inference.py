@@ -16,8 +16,9 @@ from env.models import Action
 from env.tasks import run_all_tasks
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-HF_TOKEN = os.getenv("HF_TOKEN", "DUMMY_TOKEN")
+HF_TOKEN = os.getenv("HF_TOKEN")
 MODEL_NAME = os.getenv("MODEL_NAME", "deterministic-baseline-v2")
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 TASK_NAME = os.getenv("TASK_NAME", "task3_aggressive_optimization")
 BENCHMARK = os.getenv("BENCHMARK", "finlearn_tutor")
 MAX_STEPS = int(os.getenv("MAX_STEPS", "20"))
@@ -46,10 +47,10 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     )
 
 
-def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+def log_end(success: bool, steps: int, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{reward:.2f}" for reward in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}",
+        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
         flush=True,
     )
 
@@ -178,7 +179,7 @@ def run_simulation(max_steps: int = MAX_STEPS, seed: int = SEED) -> Dict[str, An
             "success": success,
         }
     finally:
-        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+        log_end(success=success, steps=steps_taken, rewards=rewards)
 
 
 if __name__ == "__main__":
