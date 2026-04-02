@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "finlearn-tutor"
+version = "1.1.0"
+description = "OpenEnv-compatible financial learning environment for portfolio decision-making."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=1.24.0",
+  "pydantic>=2.7.0",
+  "openai>=1.40.0",
+  "openenv-core>=0.2.0",
+  "fastapi>=0.115.0",
+  "uvicorn>=0.30.0",
+  "streamlit>=1.32.0",
+  "plotly>=5.18.0",
+  "pandas>=2.0.0",
+]
+
+[project.scripts]
+server = "server.app:main"
+
+[tool.setuptools]
+packages = ["env", "server"]
