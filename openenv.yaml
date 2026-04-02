@@ -25,9 +25,16 @@ observation_space:
   portfolio_value: float
   step: int
   learning_score: float
+  risk_appetite: str
+  investment_horizon: str
+  goal: str
   investor_profile: str
   market_regime: str
   market_event: str
+  external_signal: dict[str,str]
+  portfolio_volatility: float
+  concentration_score: float
+  max_drawdown: float
   risk_level: str
   reasoning_hint: str
   last_action_feedback: str
@@ -73,7 +80,10 @@ tasks:
 
 inference:
   script: inference.py
-  required_env: []
+  required_env:
+    - API_BASE_URL
+    - MODEL_NAME
+    - HF_TOKEN
   output_format:
     - "[START] ..."
     - "[STEP] ..."

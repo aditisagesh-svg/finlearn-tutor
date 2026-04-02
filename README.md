@@ -237,28 +237,38 @@ docker run --rm -p 7860:7860 finlearn-tutor
 
 The baseline inference script is `inference.py` in the repository root.
 
+It is a deterministic, lightweight benchmark baseline designed for reproducible validator runs. The script initializes an OpenAI-compatible client for hackathon compliance, while the actual action policy remains deterministic and low-compute.
+
 Optional environment variables:
 
+- `API_BASE_URL`
+- `HF_TOKEN`
+- `MODEL_NAME`
 - `TASK_NAME`
 - `BENCHMARK`
 - `MAX_STEPS`
 - `SEED`
 - `SUCCESS_SCORE_THRESHOLD`
-- `MODEL_NAME`
 
 Example:
 
 ```bash
+export API_BASE_URL="https://router.huggingface.co/v1"
+export HF_TOKEN="your_token_here"
 export MODEL_NAME="deterministic-baseline-v2"
+export MAX_STEPS="20"
+export SEED="42"
 python inference.py
 ```
+
+The baseline passes `env.get_episode_summary()` into the graders, so task scores reflect trajectory-aware behavior rather than only the terminal state.
 
 ## Inference Output Format
 
 The baseline emits strict validator-friendly logs:
 
 ```text
-[START] task=task3_returns_with_low_risk env=finlearn_tutor model=deterministic-baseline-v2
+[START] task=task3_aggressive_optimization env=finlearn_tutor model=deterministic-baseline-v2
 [STEP] step=1 action=1 reward=-0.15 done=false error=null
 [STEP] step=2 action=1 reward=-0.14 done=false error=null
 [END] success=true steps=20 score=0.584 rewards=-0.15,-0.14,...
@@ -273,6 +283,18 @@ The baseline emits strict validator-friendly logs:
 - measuring whether more advanced agents genuinely improve trajectory quality
 
 That separation makes the project stronger: the environment is the benchmark, and the baseline is the reproducible control policy.
+
+## Baseline Scores
+
+With the default deterministic baseline (`SEED=42`, `MAX_STEPS=20`), the environment produces reproducible trajectory-aware scores.
+
+The exact values remain deterministic per seed and may evolve as the benchmark improves, but the reported outputs are always bounded in `[0.0, 1.0]` and derived from:
+
+- growth over the episode
+- maximum drawdown
+- realized volatility
+- trade efficiency
+- regime adaptation quality
 
 ## API Check
 
