@@ -1,18 +1,14 @@
 """
-environment.py — FinLearn Tutor core RL environment
-
-Enhanced with:
-  - user profiles
-  - market regimes
-  - risk metrics
-  - action reasons
-  - risk-aware rebalancing
+Core FinLearn Tutor environment with deterministic trajectory-aware state.
 """
+
+from __future__ import annotations
 
 from typing import Dict, Tuple
 
 from env.feedback import generate_feedback
 from env.market import Market, STOCKS
+from env.metrics import compute_drawdown, compute_returns, compute_volatility
 from env.models import Action, Observation, Reward
 from env.rewards import calculate_reward
 
@@ -20,12 +16,30 @@ INITIAL_CASH = 1000.0
 TRADE_AMOUNT = 100.0
 
 _PROFILES = [
-    {"risk_appetite": "low", "investment_horizon": "long", "goal": "capital_preservation"},
-    {"risk_appetite": "medium", "investment_horizon": "long", "goal": "wealth_growth"},
-    {"risk_appetite": "high", "investment_horizon": "short", "goal": "wealth_growth"},
-    {"risk_appetite": "low", "investment_horizon": "short", "goal": "capital_preservation"},
-    {"risk_appetite": "medium", "investment_horizon": "short", "goal": "wealth_growth"},
-    {"risk_appetite": "high", "investment_horizon": "long", "goal": "wealth_growth"},
+    {
+        "investor_profile": "conservative",
+        "risk_appetite": "low",
+        "investment_horizon": "long",
+        "goal": "capital_preservation",
+        "reward_weights": {"growth": 0.20, "risk": 0.45, "stability": 0.20, "trading": 0.15},
+        "risk_penalty_multiplier": 1.3,
+    },
+    {
+        "investor_profile": "balanced",
+        "risk_appetite": "medium",
+        "investment_horizon": "long",
+        "goal": "balanced_growth",
+        "reward_weights": {"growth": 0.35, "risk": 0.25, "stability": 0.20, "trading": 0.20},
+        "risk_penalty_multiplier": 1.0,
+    },
+    {
+        "investor_profile": "aggressive",
+        "risk_appetite": "high",
+        "investment_horizon": "short",
+        "goal": "aggressive_optimization",
+        "reward_weights": {"growth": 0.50, "risk": 0.15, "stability": 0.10, "trading": 0.25},
+        "risk_penalty_multiplier": 0.8,
+    },
 ]
 
 
@@ -56,6 +70,11 @@ class FinLearnEnv:
         self.last_hint = ""
         self._peak_value = INITIAL_CASH
         self._max_drawdown = 0.0
+        self.last_action_feedback = "Episode reset. Build a strategy that matches the investor profile and market regime."
+        self.action_history: list[int] = []
+        self.portfolio_history = [INITIAL_CASH]
+        self.return_history: list[float] = []
+        self.step_records: list[Dict] = []
         return self.state()
 
     def state(self) -> Observation:
@@ -76,10 +95,16 @@ class FinLearnEnv:
             risk_appetite=self.profile["risk_appetite"],
             investment_horizon=self.profile["investment_horizon"],
             goal=self.profile["goal"],
+            investor_profile=self.profile["investor_profile"],
             market_regime=self.market.regime,
+            market_event=self.market.market_event,
+            external_signal=dict(self.market.external_signal),
             portfolio_volatility=round(portfolio_volatility, 6),
             concentration_score=round(concentration_score, 4),
             max_drawdown=round(self._max_drawdown, 4),
+            reasoning_hint=_build_reasoning_hint(self.market, self.profile, concentration_score),
+            risk_level=self.market.risk_level,
+            last_action_feedback=self.last_action_feedback,
         )
 
     def get_state(self) -> Dict:
@@ -89,18 +114,41 @@ class FinLearnEnv:
         normalized_action = action.action_id if isinstance(action, Action) else int(action)
         prices_before = dict(self.market.prices)
         prev_value = self._portfolio_value(prices_before)
+        pre_regime = self.market.regime
+        pre_event = self.market.market_event
+        pre_risk_level = self.market.risk_level
+        best_trend = max(self.market.trends.values())
 
         trade_executed = self._execute_action(normalized_action, prices_before)
 
         new_prices = self.market.step()
         self.step_count += 1
         curr_value = self._portfolio_value(new_prices)
+        portfolio_return = (curr_value - prev_value) / max(prev_value, 1.0)
 
         if curr_value > self._peak_value:
             self._peak_value = curr_value
         drawdown = (self._peak_value - curr_value) / max(self._peak_value, 1)
         if drawdown > self._max_drawdown:
             self._max_drawdown = drawdown
+
+        self.action_history.append(normalized_action)
+        self.portfolio_history.append(curr_value)
+        self.return_history.append(portfolio_return)
+        self.step_records.append(
+            {
+                "step": self.step_count,
+                "action_id": normalized_action,
+                "trade_executed": trade_executed,
+                "portfolio_before": round(prev_value, 4),
+                "portfolio_after": round(curr_value, 4),
+                "portfolio_return": round(portfolio_return, 6),
+                "regime": pre_regime,
+                "market_event": pre_event,
+                "risk_level": pre_risk_level,
+                "best_trend": round(best_trend, 6),
+            }
+        )
 
         reward = calculate_reward(
             prev_portfolio_value=prev_value,
@@ -112,9 +160,18 @@ class FinLearnEnv:
             volatility=self.market.volatility,
             profile=self.profile,
             trade_executed=trade_executed,
+            risk_level=pre_risk_level,
         )
         self.total_reward += reward.value
         self.learning_score = round(min(1.0, max(0.0, self.total_reward / 5.0)), 4)
+        self.last_action_feedback = _build_action_feedback(
+            action=normalized_action,
+            portfolio_return=portfolio_return,
+            regime=pre_regime,
+            market_event=pre_event,
+            trade_executed=trade_executed,
+            risk_level=pre_risk_level,
+        )
 
         observation = self.state()
         done = self.step_count >= self.max_steps
@@ -122,6 +179,9 @@ class FinLearnEnv:
         info["reason"] = _build_reason(normalized_action, self.market, self.profile)
         if self.last_hint:
             info["hint"] = self.last_hint
+        info["market_event"] = pre_event
+        info["risk_level"] = pre_risk_level
+        info["last_action_feedback"] = self.last_action_feedback
 
         return observation, reward, done, info
 
@@ -227,6 +287,18 @@ class FinLearnEnv:
 
         return portfolio_volatility, concentration_score
 
+    def get_episode_summary(self) -> Dict:
+        returns = compute_returns(self.portfolio_history)
+        return {
+            "portfolio_history": [round(value, 4) for value in self.portfolio_history],
+            "returns": [round(value, 6) for value in returns],
+            "action_history": list(self.action_history),
+            "step_records": list(self.step_records),
+            "trade_count": self.trade_count,
+            "max_drawdown": round(compute_drawdown(self.portfolio_history), 6),
+            "realized_volatility": round(compute_volatility(returns), 6),
+        }
+
 
 _BUY_STOCK = {1: "ALPHA", 2: "BETA", 3: "GAMMA"}
 _SELL_STOCK = {4: "ALPHA", 5: "BETA", 6: "GAMMA"}
@@ -255,3 +327,44 @@ def _build_reason(action: int, market: Market, profile: Dict[str, str]) -> str:
         return "Requesting hint — consulting AI tutor for market guidance."
 
     return f"Holding due to uncertain market conditions (regime={regime}, mixed signals)."
+
+
+def _build_reasoning_hint(market: Market, profile: Dict[str, str], concentration_score: float) -> str:
+    profile_name = profile.get("investor_profile", "balanced")
+    if market.risk_level == "high":
+        return f"Market volatility is high during {market.market_event}; {profile_name} investors should consider reducing exposure or rebalancing."
+    if market.market_event == "tech_bubble":
+        return "Tech momentum is strong but fragile; favor disciplined sizing rather than chasing a single winner."
+    if market.market_event == "inflation_spike":
+        return "Inflation is lifting commodity sensitivity; diversify instead of relying only on growth assets."
+    if concentration_score > 0.65:
+        return "Portfolio concentration is elevated, so rebalancing may improve resilience."
+    return f"{market.regime.title()} conditions favor steady, profile-aligned decisions over reactive trading."
+
+
+def _build_action_feedback(
+    action: int,
+    portfolio_return: float,
+    regime: str,
+    market_event: str,
+    trade_executed: bool,
+    risk_level: str,
+) -> str:
+    outcome = "improved" if portfolio_return > 0 else "preserved" if portfolio_return == 0 else "reduced"
+    if action in (1, 2, 3):
+        verb = "Buying"
+    elif action in (4, 5, 6):
+        verb = "Selling"
+    elif action == 7:
+        verb = "Rebalancing"
+    elif action == 8:
+        verb = "Requesting a hint"
+    else:
+        verb = "Holding"
+
+    trade_note = "executed cleanly" if trade_executed or action in (0, 8) else "did not execute"
+    return (
+        f"{verb} during {regime} conditions with {risk_level} risk {trade_note} and {outcome} next-step portfolio value."
+        if market_event == "none"
+        else f"{verb} during {market_event} {trade_note} and {outcome} next-step portfolio value."
+    )

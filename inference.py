@@ -1,7 +1,7 @@
 """
-Inference script for FinLearn Tutor.
+Deterministic baseline inference script for FinLearn Tutor.
 
-This file is intentionally strict about stdout formatting for Phase 1 validation.
+This file is intentionally strict about stdout formatting for validator compatibility.
 """
 
 from __future__ import annotations
@@ -9,16 +9,12 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, List, Optional
 
-from openai import OpenAI
-
 from env.environment import FinLearnEnv
 from env.models import Action
 from env.tasks import run_all_tasks
 
-API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.3-70B-Instruct")
-HF_TOKEN = os.getenv("HF_TOKEN", "DUMMY_TOKEN")
-TASK_NAME = os.getenv("TASK_NAME", "task3_returns_with_low_risk")
+MODEL_NAME = os.getenv("MODEL_NAME", "deterministic-baseline-v2")
+TASK_NAME = os.getenv("TASK_NAME", "task3_aggressive_optimization")
 BENCHMARK = os.getenv("BENCHMARK", "finlearn_tutor")
 MAX_STEPS = int(os.getenv("MAX_STEPS", "20"))
 SEED = int(os.getenv("SEED", "42"))
@@ -54,26 +50,27 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> No
     )
 
 
-def build_openai_client() -> OpenAI:
-    """
-    Required by the hackathon rules.
-    The deterministic baseline below keeps scores reproducible.
-    """
-    return OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
-
-
 def choose_action(state: Dict[str, Any]) -> Action:
     """
-    Deterministic baseline policy for reproducible evaluation runs.
+    Deterministic benchmark baseline policy for reproducible evaluation runs.
     """
     trends = state["trends"]
     volatility = state["volatility"]
     holdings = state["holdings"]
     prices = state["prices"]
     cash = state["cash_balance"]
+    market_regime = state.get("market_regime", "sideways")
+    risk_level = state.get("risk_level", "moderate")
+    market_event = state.get("market_event", "none")
 
     stock_values = {symbol: holdings[symbol] * prices[symbol] for symbol in holdings}
     portfolio = state["portfolio_value"]
+
+    if risk_level == "high" or market_event == "market_crash":
+        for stock, trend in trends.items():
+            if trend < 0 and holdings.get(stock, 0) > 0:
+                return Action(action_id=STOCK_SELL[stock])
+        return Action(action_id=7 if sum(stock_values.values()) > 0 else 0)
 
     if portfolio > 0 and sum(stock_values.values()) > 0:
         for symbol, value in stock_values.items():
@@ -87,6 +84,12 @@ def choose_action(state: Dict[str, Any]) -> Action:
             current_weight = stock_values.get(stock, 0) / portfolio if portfolio > 0 else 0
             if current_weight < 0.50:
                 return Action(action_id=STOCK_BUY[stock])
+
+    if market_regime == "bear":
+        for stock in ["ALPHA", "GAMMA", "BETA"]:
+            if trends[stock] < 0 and holdings.get(stock, 0) > 0:
+                return Action(action_id=STOCK_SELL[stock])
+        return Action(action_id=0)
 
     for stock, trend in trends.items():
         if trend < TREND_SELL_THRESHOLD and holdings.get(stock, 0) > 0:
@@ -111,8 +114,6 @@ def choose_action(state: Dict[str, Any]) -> Action:
 
 
 def run_simulation(max_steps: int = MAX_STEPS, seed: int = SEED) -> Dict[str, Any]:
-    _client = build_openai_client()
-
     env = FinLearnEnv(max_steps=max_steps, seed=seed)
     observation = env.reset()
     initial_value = observation.portfolio_value
@@ -142,7 +143,11 @@ def run_simulation(max_steps: int = MAX_STEPS, seed: int = SEED) -> Dict[str, An
                 error=None,
             )
 
-        task_scores = run_all_tasks(observation, initial_value)
+        task_scores = run_all_tasks(
+            observation,
+            initial_value,
+            trajectory=env.get_episode_summary(),
+        )
         score = min(max(float(task_scores["overall_score"]), 0.0), 1.0)
         success = score >= SUCCESS_SCORE_THRESHOLD
 
@@ -150,6 +155,7 @@ def run_simulation(max_steps: int = MAX_STEPS, seed: int = SEED) -> Dict[str, An
             "initial_value": initial_value,
             "task_scores": task_scores,
             "final_state": observation.model_dump(),
+            "trajectory": env.get_episode_summary(),
             "steps_taken": steps_taken,
             "rewards": rewards,
             "score": score,

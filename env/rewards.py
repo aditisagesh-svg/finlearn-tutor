@@ -26,6 +26,7 @@ def calculate_reward(
     volatility: Dict[str, float] = None,
     profile: Dict = None,
     trade_executed: bool = False,
+    risk_level: str | None = None,
 ) -> Reward:
     """
     Reward = portfolio growth + diversification bonus
@@ -64,6 +65,11 @@ def calculate_reward(
         risk_appetite = profile.get("risk_appetite", "medium")
         horizon       = profile.get("investment_horizon", "long")
         goal          = profile.get("goal", "wealth_growth")
+        reward_weights = profile.get(
+            "reward_weights",
+            {"growth": 0.35, "risk": 0.25, "stability": 0.20, "trading": 0.20},
+        )
+        risk_penalty_multiplier = profile.get("risk_penalty_multiplier", 1.0)
 
         # Weighted portfolio volatility
         total_pv = curr_portfolio_value
@@ -77,15 +83,23 @@ def calculate_reward(
 
         # a) Low-risk user + high portfolio volatility → penalty
         if risk_appetite == "low" and port_vol > 0.025:
-            profile_penalty += 0.10
+            profile_penalty += 0.10 * risk_penalty_multiplier
 
         # b) Long-horizon user + overtrading → penalty
         if horizon == "long" and trade_count > 8:
-            profile_penalty += 0.05
+            profile_penalty += 0.05 * risk_penalty_multiplier
 
         # c) Capital preservation goal + losses → extra penalty
         if goal == "capital_preservation" and growth < -0.005:
-            profile_penalty += 0.15
+            profile_penalty += 0.15 * risk_penalty_multiplier
+
+        if risk_level == "high" and action in (1, 2, 3):
+            profile_penalty += 0.04 * risk_penalty_multiplier
+
+        growth_reward *= reward_weights.get("growth", 0.35) / 0.35
+        concentration_penalty *= reward_weights.get("risk", 0.25) / 0.25
+        overtrading_penalty *= reward_weights.get("trading", 0.20) / 0.20
+        diversification_bonus *= reward_weights.get("stability", 0.20) / 0.20
 
     # ── Assemble final reward ────────────────────────────────────────────────
     reward_value = (

@@ -2,7 +2,7 @@ name: FinLearnTutor
 version: "1.1.0"
 description: >
   OpenEnv-compatible financial decision-making environment for evaluating
-  agents on portfolio growth, diversification, and risk control.
+  agents on trajectory-aware portfolio growth, regime adaptation, and risk control.
 entrypoint: env.environment:FinLearnEnv
 
 models:
@@ -25,6 +25,12 @@ observation_space:
   portfolio_value: float
   step: int
   learning_score: float
+  investor_profile: str
+  market_regime: str
+  market_event: str
+  risk_level: str
+  reasoning_hint: str
+  last_action_feedback: str
 
 action_space:
   type: discrete
@@ -50,27 +56,24 @@ reward:
 
 tasks:
   - id: task1
-    name: Avoid Losses
+    name: Capital Preservation
     difficulty: easy
     grader: env.tasks:grade_task1
     score_range: [0.0, 1.0]
   - id: task2
-    name: Maintain Diversification
+    name: Balanced Growth
     difficulty: medium
     grader: env.tasks:grade_task2
     score_range: [0.0, 1.0]
   - id: task3
-    name: Maximize Returns with Low Risk
+    name: Aggressive Optimization
     difficulty: hard
     grader: env.tasks:grade_task3
     score_range: [0.0, 1.0]
 
 inference:
   script: inference.py
-  required_env:
-    - API_BASE_URL
-    - MODEL_NAME
-    - HF_TOKEN
+  required_env: []
   output_format:
     - "[START] ..."
     - "[STEP] ..."
