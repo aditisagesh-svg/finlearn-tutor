@@ -17,7 +17,9 @@ def healthcheck() -> dict:
 
 @app.post("/reset")
 def reset() -> dict:
-    observation = env.reset()
+    global env
+    env = FinLearnEnv(max_steps=env.max_steps, seed=env.seed)
+    observation = env.state()
     return {
         "observation": observation.model_dump(),
         "done": False,
