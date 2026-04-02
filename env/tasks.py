@@ -1,100 +1,177 @@
 """
-tasks.py — Task graders for FinLearn Tutor
-
-Each task returns a score from 0.0 to 1.0.
+Trajectory-aware task graders for FinLearn Tutor.
 """
+
+from __future__ import annotations
 
 from typing import Dict
 
+from env.metrics import (
+    clamp_score,
+    compute_drawdown,
+    compute_regime_adaptation,
+    compute_returns,
+    compute_trade_efficiency,
+    compute_volatility,
+    normalize_growth,
+    normalize_inverse,
+)
 from env.models import Observation
+
+TASK_CONFIGS = {
+    "task1_capital_preservation": {
+        "label": "Capital Preservation",
+        "weights": {"growth": 0.20, "risk_control": 0.35, "stability": 0.25, "decision_quality": 0.20},
+        "targets": {"growth": 0.04, "drawdown_cap": 0.10, "vol_cap": 0.025, "trade_cap": 8},
+    },
+    "task2_balanced_growth": {
+        "label": "Balanced Growth",
+        "weights": {"growth": 0.40, "risk_control": 0.20, "stability": 0.20, "decision_quality": 0.20},
+        "targets": {"growth": 0.10, "drawdown_cap": 0.18, "vol_cap": 0.035, "trade_cap": 12},
+    },
+    "task3_aggressive_optimization": {
+        "label": "Aggressive Optimization",
+        "weights": {"growth": 0.50, "risk_control": 0.15, "stability": 0.10, "decision_quality": 0.25},
+        "targets": {"growth": 0.18, "drawdown_cap": 0.28, "vol_cap": 0.05, "trade_cap": 16},
+    },
+}
 
 
 def _as_state_dict(final_state: Observation | Dict) -> Dict:
     return final_state.model_dump() if isinstance(final_state, Observation) else final_state
 
 
-def grade_task1(final_state: Observation | Dict, initial_value: float = 1000.0) -> float:
-    """
-    TASK 1 (Easy): Avoid Losses
-    Score 1.0 if portfolio_value >= initial, scaled down proportionally otherwise.
-    """
+def build_episode_context(
+    final_state: Observation | Dict,
+    initial_value: float = 1000.0,
+    trajectory: Dict | None = None,
+) -> Dict:
     state = _as_state_dict(final_state)
-    final_value = state["portfolio_value"]
-    if final_value >= initial_value:
-        return 1.0
-    loss_pct = (initial_value - final_value) / initial_value
-    score = max(0.0, 1.0 - loss_pct * 5)   # lose 20% → score 0
-    return round(score, 4)
+    portfolio_history = trajectory.get("portfolio_history", [initial_value, state["portfolio_value"]]) if trajectory else [initial_value, state["portfolio_value"]]
+    actions = trajectory.get("action_history", []) if trajectory else []
+    steps = trajectory.get("step_records", []) if trajectory else []
 
+    returns = compute_returns(portfolio_history)
+    growth = (portfolio_history[-1] - portfolio_history[0]) / max(portfolio_history[0], 1e-9)
+    drawdown = compute_drawdown(portfolio_history)
+    volatility = compute_volatility(returns)
+    trade_count = sum(1 for action in actions if action not in (0, 8))
+    trade_efficiency = compute_trade_efficiency(actions, portfolio_history)
+    regime_adaptation = compute_regime_adaptation(steps)
 
-def grade_task2(final_state: Observation | Dict) -> float:
-    """
-    TASK 2 (Medium): Maintain Diversification
-    Score based on how evenly holdings are spread across 3 stocks.
-    Full score = 1 share of each stock at minimum.
-    """
-    state = _as_state_dict(final_state)
-    holdings = state["holdings"]
-    prices = state["prices"]
-
-    stock_values = {s: holdings[s] * prices[s] for s in holdings}
-    total = sum(stock_values.values())
-
-    if total == 0:
-        return 0.0   # No stocks held at all
-
-    stocks_held = sum(1 for v in stock_values.values() if v > 0)
-    if stocks_held == 1:
-        base = 0.2
-    elif stocks_held == 2:
-        base = 0.6
-    else:
-        base = 1.0
-
-    # Additional bonus for balance (low concentration)
-    weights = [v / total for v in stock_values.values()]
-    max_weight = max(weights)
-    balance_bonus = 1.0 - max_weight  # 0 if all in one, 0.67 if perfectly split
-
-    score = base * 0.7 + balance_bonus * 0.3
-    return round(min(1.0, score), 4)
-
-
-def grade_task3(final_state: Observation | Dict, initial_value: float = 1000.0) -> float:
-    """
-    TASK 3 (Hard): Maximize Returns with Low Risk
-    Reward = growth * (1 - max_concentration_penalty)
-    """
-    state = _as_state_dict(final_state)
-    final_value = state["portfolio_value"]
-    growth = (final_value - initial_value) / initial_value  # e.g. 0.15 = 15% gain
-
-    holdings = state["holdings"]
-    prices = state["prices"]
-    stock_values = {s: holdings[s] * prices[s] for s in holdings}
-    total = sum(stock_values.values())
-
-    concentration_penalty = 0.0
-    if total > 0:
-        max_weight = max(v / total for v in stock_values.values())
-        concentration_penalty = max(0.0, max_weight - 0.5)  # penalty if >50% in one stock
-
-    growth_score = min(1.0, max(0.0, growth * 5))         # 20% growth → full score
-    risk_multiplier = 1.0 - concentration_penalty
-
-    score = growth_score * risk_multiplier
-    return round(score, 4)
-
-
-def run_all_tasks(final_state: Observation | Dict, initial_value: float = 1000.0) -> Dict:
-    """Run all three task graders and return a summary."""
-    t1 = grade_task1(final_state, initial_value)
-    t2 = grade_task2(final_state)
-    t3 = grade_task3(final_state, initial_value)
-    overall = round((t1 + t2 + t3) / 3, 4)
     return {
-        "task1_avoid_losses":           t1,
-        "task2_diversification":        t2,
-        "task3_returns_with_low_risk":  t3,
-        "overall_score":                overall,
+        "growth": growth,
+        "drawdown": drawdown,
+        "volatility": volatility,
+        "trade_count": trade_count,
+        "trade_efficiency": trade_efficiency,
+        "regime_adaptation": regime_adaptation,
+        "returns": returns,
+        "portfolio_history": portfolio_history,
+        "decision_quality": clamp_score((trade_efficiency + regime_adaptation) / 2.0),
+    }
+
+
+def score_trajectory(
+    final_state: Observation | Dict,
+    initial_value: float = 1000.0,
+    trajectory: Dict | None = None,
+    weights: Dict[str, float] | None = None,
+    targets: Dict[str, float] | None = None,
+) -> Dict[str, float]:
+    metrics = build_episode_context(final_state, initial_value=initial_value, trajectory=trajectory)
+    weights = weights or TASK_CONFIGS["task2_balanced_growth"]["weights"]
+    targets = targets or TASK_CONFIGS["task2_balanced_growth"]["targets"]
+
+    growth_score = normalize_growth(metrics["growth"], targets["growth"])
+    risk_control_score = normalize_inverse(metrics["drawdown"], targets["drawdown_cap"])
+    stability_score = normalize_inverse(metrics["volatility"], targets["vol_cap"])
+    trade_score = normalize_inverse(metrics["trade_count"], targets["trade_cap"])
+    decision_quality_score = clamp_score((metrics["decision_quality"] * 0.7) + (trade_score * 0.3))
+
+    score = clamp_score(
+        growth_score * weights["growth"]
+        + risk_control_score * weights["risk_control"]
+        + stability_score * weights["stability"]
+        + decision_quality_score * weights["decision_quality"]
+    )
+
+    return {
+        "score": score,
+        "growth_score": round(growth_score, 4),
+        "risk_control_score": round(risk_control_score, 4),
+        "stability_score": round(stability_score, 4),
+        "decision_quality_score": round(decision_quality_score, 4),
+        "portfolio_growth": round(metrics["growth"], 4),
+        "maximum_drawdown": round(metrics["drawdown"], 4),
+        "portfolio_volatility": round(metrics["volatility"], 4),
+        "trade_count": metrics["trade_count"],
+        "trade_efficiency": round(metrics["trade_efficiency"], 4),
+        "regime_adaptation": round(metrics["regime_adaptation"], 4),
+    }
+
+
+def grade_task1(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> float:
+    return score_trajectory(
+        final_state,
+        initial_value=initial_value,
+        trajectory=trajectory,
+        weights=TASK_CONFIGS["task1_capital_preservation"]["weights"],
+        targets=TASK_CONFIGS["task1_capital_preservation"]["targets"],
+    )["score"]
+
+
+def grade_task2(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> float:
+    return score_trajectory(
+        final_state,
+        initial_value=initial_value,
+        trajectory=trajectory,
+        weights=TASK_CONFIGS["task2_balanced_growth"]["weights"],
+        targets=TASK_CONFIGS["task2_balanced_growth"]["targets"],
+    )["score"]
+
+
+def grade_task3(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> float:
+    return score_trajectory(
+        final_state,
+        initial_value=initial_value,
+        trajectory=trajectory,
+        weights=TASK_CONFIGS["task3_aggressive_optimization"]["weights"],
+        targets=TASK_CONFIGS["task3_aggressive_optimization"]["targets"],
+    )["score"]
+
+
+def run_all_tasks(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> Dict:
+    preservation = score_trajectory(
+        final_state,
+        initial_value=initial_value,
+        trajectory=trajectory,
+        weights=TASK_CONFIGS["task1_capital_preservation"]["weights"],
+        targets=TASK_CONFIGS["task1_capital_preservation"]["targets"],
+    )
+    balanced = score_trajectory(
+        final_state,
+        initial_value=initial_value,
+        trajectory=trajectory,
+        weights=TASK_CONFIGS["task2_balanced_growth"]["weights"],
+        targets=TASK_CONFIGS["task2_balanced_growth"]["targets"],
+    )
+    aggressive = score_trajectory(
+        final_state,
+        initial_value=initial_value,
+        trajectory=trajectory,
+        weights=TASK_CONFIGS["task3_aggressive_optimization"]["weights"],
+        targets=TASK_CONFIGS["task3_aggressive_optimization"]["targets"],
+    )
+    overall = round((preservation["score"] + balanced["score"] + aggressive["score"]) / 3, 4)
+    return {
+        "task1_capital_preservation": preservation["score"],
+        "task2_balanced_growth": balanced["score"],
+        "task3_aggressive_optimization": aggressive["score"],
+        "overall_score": overall,
+        "benchmark_breakdown": {
+            "capital_preservation": preservation,
+            "balanced_growth": balanced,
+            "aggressive_optimization": aggressive,
+        },
     }

@@ -129,19 +129,29 @@ def simulation(max_steps: int = 20, seed: int = 42) -> dict:
                 "concept": info["insight"],
                 "suggestion": info["suggestion"],
                 "market_regime": observation.market_regime,
+                "market_event": observation.market_event,
+                "risk_level": observation.risk_level,
+                "reasoning_hint": observation.reasoning_hint,
+                "last_action_feedback": observation.last_action_feedback,
+                "external_signal": observation.external_signal,
                 "max_drawdown": observation.max_drawdown,
                 "concentration_score": observation.concentration_score,
                 "portfolio_volatility": observation.portfolio_volatility,
             }
         )
 
-    task_scores = run_all_tasks(observation, initial_value)
+    task_scores = run_all_tasks(
+        observation,
+        initial_value,
+        trajectory=dashboard_env.get_episode_summary(),
+    )
 
     return {
         "initial_value": initial_value,
         "steps": steps,
         "task_scores": task_scores,
         "final_state": observation.model_dump(),
+        "trajectory": dashboard_env.get_episode_summary(),
     }
 
 
