@@ -1,9 +1,2 @@
-
-numpy>=1.24.0
-pydantic>=2.7.0
-openai>=1.40.0
-fastapi>=0.115.0
-uvicorn>=0.30.0
-streamlit>=1.32.0
-plotly>=5.18.0
-pandas>=2.0.0
+# Install the project itself so dependencies come from pyproject.toml.
+.

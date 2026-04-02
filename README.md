@@ -10,9 +10,9 @@ pinned: false
 
 # FinLearn Tutor
 
-FinLearn Tutor is an OpenEnv-style financial learning environment for evaluating agents on portfolio decision-making. The environment simulates a small investment workflow where an agent must manage cash, select buy and sell actions, react to changing market trends, and balance growth against concentration risk.
+FinLearn Tutor is an OpenEnv-compatible financial learning environment for evaluating agents on portfolio decision-making. It simulates a retail-investing workflow where an agent must manage cash, trade among synthetic assets, react to different market regimes, and balance returns against diversification and risk.
 
-The task is intended as a real-world financial learning simulation rather than a game. The agent is evaluated on capital preservation, diversification, and risk-adjusted returns across a fixed-horizon episode.
+The environment is designed as a real-world financial learning simulation rather than a game. It supports profile-aware evaluation through deterministic investor profiles and exposes explainable feedback at each step.
 
 ## Environment Overview
 
@@ -21,6 +21,8 @@ The task is intended as a real-world financial learning simulation rather than a
 - Initial cash: `$1000.00`
 - Assets: `ALPHA`, `BETA`, `GAMMA`
 - Trade size: fixed `$100` buy or sell increments
+- Market regimes: `bull`, `bear`, `sideways`, `crash`
+- User profiles: deterministic combinations of risk appetite, investment horizon, and goal
 
 The environment implements:
 
@@ -41,7 +43,7 @@ The environment implements:
 | 4 | `SELL_ALPHA` | Sell up to `$100` of `ALPHA` |
 | 5 | `SELL_BETA` | Sell up to `$100` of `BETA` |
 | 6 | `SELL_GAMMA` | Sell up to `$100` of `GAMMA` |
-| 7 | `REBALANCE` | Sell half of the most concentrated holding |
+| 7 | `REBALANCE` | Risk-aware rebalance using inverse-volatility targets |
 | 8 | `REQUEST_HINT` | Request a tutor hint without trading |
 
 ## Observation Space
@@ -58,6 +60,13 @@ Each observation contains:
 | `portfolio_value` | `float` | Cash plus marked-to-market stock value |
 | `step` | `int` | Current step number |
 | `learning_score` | `float` | Running normalized learning score in `[0.0, 1.0]` |
+| `risk_appetite` | `str` | Investor risk profile |
+| `investment_horizon` | `str` | Investor horizon profile |
+| `goal` | `str` | Investor objective |
+| `market_regime` | `str` | Active market regime |
+| `portfolio_volatility` | `float` | Weighted volatility estimate for held assets |
+| `concentration_score` | `float` | Maximum single-asset concentration |
+| `max_drawdown` | `float` | Running maximum drawdown in the episode |
 
 ## Tasks
 
@@ -65,9 +74,9 @@ The project includes three deterministic tasks with graders that return scores i
 
 | Task ID | Difficulty | Objective | Grader |
 |---|---|---|---|
-| `task1` | Easy | Avoid losses relative to the starting portfolio value | `grade_task1` |
-| `task2` | Medium | Maintain diversification across holdings | `grade_task2` |
-| `task3` | Hard | Maximize returns while limiting concentration risk | `grade_task3` |
+| `task1` | Easy | Preserve capital during uncertain market conditions | `grade_task1` |
+| `task2` | Medium | Maintain a diversified portfolio under changing market regimes | `grade_task2` |
+| `task3` | Hard | Maximize risk-adjusted returns while avoiding overexposure | `grade_task3` |
 
 ## Reward Function
 
@@ -77,6 +86,8 @@ Reward is shaped across the full trajectory and includes:
 - Diversification bonus
 - Concentration penalty
 - Overtrading penalty
+- Transaction cost penalty
+- Profile-alignment penalty for mismatched risk behavior
 
 This provides intermediate learning signal instead of a purely terminal binary outcome.
 
@@ -88,17 +99,39 @@ This provides intermediate learning signal instead of a purely terminal binary o
 ├── Dockerfile
 ├── inference.py
 ├── openenv.yaml
+├── pyproject.toml
 ├── requirements.txt
+├── uv.lock
 ├── README.md
-└── env/
+├── frontend/
+│   ├── public/
+│   ├── src/
+│   └── README.md
+├── env/
+│   ├── __init__.py
+│   ├── environment.py
+│   ├── feedback.py
+│   ├── market.py
+│   ├── models.py
+│   ├── rewards.py
+│   └── tasks.py
+└── server/
     ├── __init__.py
-    ├── environment.py
-    ├── feedback.py
-    ├── market.py
-    ├── models.py
-    ├── rewards.py
-    └── tasks.py
+    └── app.py
 ```
+
+## Frontend Placement
+
+If you export a React or Lovable dashboard, place it inside `frontend/` instead of the repository root.
+
+- Put app code such as `src/`, `components/`, `hooks/`, `lib/`, `pages/`, `App.tsx`, `main.tsx`, and `index.css` inside `frontend/`
+- Put web assets such as `favicon.ico`, `robots.txt`, and `placeholder.svg` inside `frontend/public/` when the Vite app expects public assets
+- Keep the existing Python files in the repository root so the simulation and server remain separate from the frontend build toolchain
+
+This keeps the repo organized as:
+
+- Python simulation and API at the root
+- React frontend in `frontend/`
 
 ## Setup
 
@@ -109,11 +142,37 @@ pip install -r requirements.txt
 python inference.py
 ```
 
+`requirements.txt` intentionally installs the local project package, so dependency resolution comes from `pyproject.toml` and stays aligned with Docker builds and OpenEnv validation.
+
+### Final Dashboard
+
+The project now includes a separate React frontend in `frontend/` that uses the real simulation output from the Python backend.
+
+Run the backend:
+
+```bash
+python -m server.app
+```
+
+Run the frontend in a second terminal:
+
+```bash
+cd frontend
+npm install
+cp .env.example .env
+npm run dev
+```
+
+The frontend calls:
+
+- `GET /api/simulation` for the final dashboard data
+- `POST /reset` for the validator-compatible environment endpoint
+
 ### Docker
 
 ```bash
 docker build -t finlearn-tutor .
-docker run --rm finlearn-tutor
+docker run --rm -p 7860:7860 finlearn-tutor
 ```
 
 ## Inference Configuration
@@ -151,7 +210,7 @@ The baseline emits strict validator-friendly logs:
 [START] task=task3_returns_with_low_risk env=finlearn_tutor model=meta-llama/Llama-3.3-70B-Instruct
 [STEP] step=1 action=1 reward=-0.15 done=false error=null
 [STEP] step=2 action=1 reward=-0.14 done=false error=null
-[END] success=true steps=20 score=0.609 rewards=-0.15,-0.14,...
+[END] success=true steps=20 score=0.584 rewards=-0.15,-0.14,...
 ```
 
 ## Baseline Scores
@@ -161,9 +220,19 @@ With the default deterministic baseline (`SEED=42`, `MAX_STEPS=20`), the environ
 | Metric | Score |
 |---|---|
 | `task1_avoid_losses` | `1.0000` |
-| `task2_diversification` | `0.4841` |
-| `task3_returns_with_low_risk` | `0.3427` |
-| `overall_score` | `0.6089` |
+| `task2_diversification` | `0.4977` |
+| `task3_returns_with_low_risk` | `0.2552` |
+| `overall_score` | `0.5843` |
+
+## API Check
+
+The deployed Hugging Face Space exposes a validator-compatible reset endpoint:
+
+```bash
+curl -X POST https://aditisageshhh-finlearn-tutor.hf.space/reset \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
 
 ## Validation Checklist
 
@@ -175,4 +244,9 @@ docker build -t finlearn-tutor .
 openenv validate
 ```
 
-If deploying to Hugging Face Spaces, ensure the Space is live and responds to the validator checks required by the hackathon.
+The current project is structured to satisfy:
+
+- Hugging Face Space `/reset` availability
+- Docker build validation
+- OpenEnv validation
+- baseline inference logging requirements

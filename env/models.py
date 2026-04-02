@@ -36,6 +36,13 @@ class Observation(BaseModel):
     portfolio_value: float
     step: int
     learning_score: float = Field(ge=0.0, le=1.0)
+    risk_appetite: str | None = None
+    investment_horizon: str | None = None
+    goal: str | None = None
+    market_regime: str | None = None
+    portfolio_volatility: float | None = None
+    concentration_score: float | None = None
+    max_drawdown: float | None = None
 
 
 class Action(BaseModel):
@@ -63,6 +70,8 @@ class Reward(BaseModel):
     diversification_bonus: float
     concentration_penalty: float
     overtrading_penalty: float
+    transaction_cost: float = 0.0
+    profile_penalty: float = 0.0
 
 
 class StepInfo(BaseModel):
