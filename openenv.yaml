@@ -1,0 +1,77 @@
+name: FinLearnTutor
+version: "1.1.0"
+description: >
+  OpenEnv-compatible financial decision-making environment for evaluating
+  agents on portfolio growth, diversification, and risk control.
+entrypoint: env.environment:FinLearnEnv
+
+models:
+  observation: env.models:Observation
+  action: env.models:Action
+  reward: env.models:Reward
+
+environment:
+  max_steps: 30
+  initial_cash: 1000.0
+  trade_amount: 100.0
+  seed: 42
+
+observation_space:
+  cash_balance: float
+  holdings: dict[str,int]
+  prices: dict[str,float]
+  trends: dict[str,float]
+  volatility: dict[str,float]
+  portfolio_value: float
+  step: int
+  learning_score: float
+
+action_space:
+  type: discrete
+  actions:
+    0: HOLD
+    1: BUY_ALPHA
+    2: BUY_BETA
+    3: BUY_GAMMA
+    4: SELL_ALPHA
+    5: SELL_BETA
+    6: SELL_GAMMA
+    7: REBALANCE
+    8: REQUEST_HINT
+
+reward:
+  type: shaped
+  range: [-1.0, 1.0]
+  components:
+    portfolio_growth: positive
+    diversification_bonus: positive
+    concentration_penalty: negative
+    overtrading_penalty: negative
+
+tasks:
+  - id: task1
+    name: Avoid Losses
+    difficulty: easy
+    grader: env.tasks:grade_task1
+    score_range: [0.0, 1.0]
+  - id: task2
+    name: Maintain Diversification
+    difficulty: medium
+    grader: env.tasks:grade_task2
+    score_range: [0.0, 1.0]
+  - id: task3
+    name: Maximize Returns with Low Risk
+    difficulty: hard
+    grader: env.tasks:grade_task3
+    score_range: [0.0, 1.0]
+
+inference:
+  script: inference.py
+  required_env:
+    - API_BASE_URL
+    - MODEL_NAME
+    - HF_TOKEN
+  output_format:
+    - "[START] ..."
+    - "[STEP] ..."
+    - "[END] ..."
