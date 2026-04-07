@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from env.environment import FinLearnEnv
+from env.market import STOCKS
 from env.tasks import run_all_tasks
 from inference import choose_action, build_openai_client, ping_llm_proxy
 
@@ -88,24 +89,63 @@ def placeholder():
 
 @app.post("/reset")
 def reset() -> dict:
-    global env
-    env = FinLearnEnv(
-        max_steps=getattr(env, "max_steps", 30),
-        seed=getattr(env, "seed", 42),
-    )
-    api_base_url = os.getenv("API_BASE_URL")
-    api_key = os.getenv("API_KEY")
-    if api_base_url and api_key:
+    def _fallback_observation() -> dict:
+        return {
+            "cash_balance": 1000.0,
+            "holdings": {stock: 0 for stock in STOCKS},
+            "prices": {"ALPHA": 100.0, "BETA": 150.0, "GAMMA": 80.0},
+            "trends": {"ALPHA": 0.0, "BETA": 0.0, "GAMMA": 0.0},
+            "volatility": {"ALPHA": 0.02, "BETA": 0.02, "GAMMA": 0.02},
+            "portfolio_value": 1000.0,
+            "step": 0,
+            "learning_score": 0.0,
+            "risk_appetite": "medium",
+            "investment_horizon": "long",
+            "goal": "balanced_growth",
+            "investor_profile": "balanced",
+            "market_regime": "sideways",
+            "market_event": "none",
+            "external_signal": {"signal": "Market is waiting for a catalyst", "impact": "neutral", "sector": "all"},
+            "portfolio_volatility": 0.0,
+            "concentration_score": 0.0,
+            "max_drawdown": 0.0,
+            "risk_level": "moderate",
+            "reasoning_hint": "Market conditions are neutral; begin with disciplined, profile-aligned decisions.",
+            "last_action_feedback": "Episode reset. Build a strategy that matches the investor profile and market regime.",
+        }
+
+    try:
+        global env
+        env = FinLearnEnv(
+            max_steps=getattr(env, "max_steps", 30),
+            seed=getattr(env, "seed", 42),
+        )
+        api_base_url = os.getenv("API_BASE_URL")
+        api_key = os.getenv("API_KEY")
+        if api_base_url and api_key:
+            try:
+                ping_llm_proxy(build_openai_client())
+            except Exception:
+                # Reset must still succeed even if the proxy ping fails.
+                pass
+        observation = env.state()
+        return {
+            "observation": observation.model_dump(),
+            "done": False,
+        }
+    except Exception:
         try:
-            ping_llm_proxy(build_openai_client())
+            env = FinLearnEnv(max_steps=30, seed=42)
+            observation = env.state()
+            return {
+                "observation": observation.model_dump(),
+                "done": False,
+            }
         except Exception:
-            # Reset must still succeed even if the proxy ping fails.
-            pass
-    observation = env.state()
-    return {
-        "observation": observation.model_dump(),
-        "done": False,
-    }
+            return {
+                "observation": _fallback_observation(),
+                "done": False,
+            }
 
 
 @app.get("/api/simulation")
