@@ -242,8 +242,8 @@ It is a deterministic, lightweight benchmark baseline designed for reproducible 
 Optional environment variables:
 
 - `API_BASE_URL`
-- `API_KEY`
 - `MODEL_NAME`
+- `HF_TOKEN`
 - `TASK_NAME`
 - `BENCHMARK`
 - `MAX_STEPS`
@@ -254,26 +254,24 @@ Example:
 
 ```bash
 export API_BASE_URL="https://router.huggingface.co/v1"
-export API_KEY="your_proxy_key_here"
 export MODEL_NAME="deterministic-baseline-v2"
+export HF_TOKEN="your_proxy_key_here"
 export MAX_STEPS="20"
 export SEED="42"
 python inference.py
 ```
 
-The baseline passes `env.get_episode_summary()` into the graders, so task scores reflect trajectory-aware behavior rather than only the terminal state. During validator runs, it uses the injected `API_BASE_URL` and `API_KEY` to route a minimal request through the hackathon proxy before executing the local policy.
+The baseline passes `env.get_episode_summary()` into the graders, so task scores reflect trajectory-aware behavior rather than only the terminal state. During validator runs, it uses the injected `API_BASE_URL` and `HF_TOKEN` to route a minimal request through the hackathon proxy before executing the local policy.
 
 ## Inference Output Format
 
 The baseline emits strict validator-friendly logs:
 
 ```text
-[START]
-[STEP]
-[STEP]
-[STEP]
-...
-[END]
+[START] task=finlearn-tutor env=finlearn model=deterministic-baseline-v2
+[STEP] step=1 action=1 reward=0.00 done=false error=null
+[STEP] step=2 action=7 reward=0.00 done=false error=null
+[END] success=true steps=20 rewards=0.00,0.00,...
 ```
 
 ## Benchmark Positioning

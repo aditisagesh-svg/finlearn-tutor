@@ -54,7 +54,7 @@ action_space:
 
 reward:
   type: shaped
-  range: [-1.0, 1.0]
+  range: [0.0, 1.0]
   components:
     portfolio_growth: positive
     diversification_bonus: positive
@@ -83,8 +83,8 @@ inference:
   required_env:
     - API_BASE_URL
     - MODEL_NAME
-    - API_KEY
+    - HF_TOKEN
   output_format:
-    - "[START] ..."
-    - "[STEP] ..."
-    - "[END] ..."
+    - "[START] task=<task_name> env=<benchmark> model=<model_name>"
+    - "[STEP] step=<n> action=<action_str> reward=<0.00> done=<true|false> error=<msg|null>"
+    - "[END] success=<true|false> steps=<n> rewards=<r1,r2,...,rn>"

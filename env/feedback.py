@@ -56,7 +56,7 @@ def _build_reasoning(action, trends, volatility, holdings, prices, cash, reward)
     if action == 0:  # HOLD
         return (
             "You chose to hold your position. "
-            f"Current reward: {reward:+.4f}. "
+            f"Current reward: {reward:+.2f}. "
             "Holding is rational when market signals are mixed or when avoiding unnecessary transaction costs."
         )
 
@@ -72,7 +72,7 @@ def _build_reasoning(action, trends, volatility, holdings, prices, cash, reward)
         return (
             f"You bought {stock} (trend={t:+.4f}, volatility={v:.4f}). "
             f"{stock} is showing {quality}. "
-            f"Reward: {reward:+.4f}."
+            f"Reward: {reward:+.2f}."
         )
 
     if action in (4, 5, 6):  # SELL
@@ -87,7 +87,7 @@ def _build_reasoning(action, trends, volatility, holdings, prices, cash, reward)
         return (
             f"You sold {stock} (trend={t:+.4f}, qty held={qty}). "
             f"{stock} shows {quality}. "
-            f"Reward: {reward:+.4f}."
+            f"Reward: {reward:+.2f}."
         )
 
     if action == 7:  # REBALANCE

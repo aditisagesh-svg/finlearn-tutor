@@ -562,7 +562,7 @@ def render_feed(steps, current_index):
                     <span class="feed-action {action_class(step['action'])}">{action}</span>
                     <span class="feed-value">${step['portfolio_value']:,.2f}</span>
                 </div>
-                <div class="feed-meta">Reward {step['reward']:+.4f}</div>
+                <div class="feed-meta">Reward {step['reward']:+.2f}</div>
             </div>
             """
         )

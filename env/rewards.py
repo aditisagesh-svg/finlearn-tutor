@@ -111,11 +111,11 @@ def calculate_reward(
         - profile_penalty
     )
     return Reward(
-        value=round(reward_value, 4),
-        portfolio_growth=round(growth_reward, 4),
-        diversification_bonus=round(diversification_bonus, 4),
-        concentration_penalty=round(concentration_penalty, 4),
-        overtrading_penalty=round(overtrading_penalty, 4),
-        transaction_cost=round(tx_cost, 4),
-        profile_penalty=round(profile_penalty, 4),
+        value=round(max(0.0, min(1.0, reward_value)), 2),
+        portfolio_growth=round(growth_reward, 2),
+        diversification_bonus=round(diversification_bonus, 2),
+        concentration_penalty=round(concentration_penalty, 2),
+        overtrading_penalty=round(overtrading_penalty, 2),
+        transaction_cost=round(tx_cost, 2),
+        profile_penalty=round(profile_penalty, 2),
     )

@@ -15,8 +15,8 @@ from env.environment import FinLearnEnv
 from env.models import Action
 from env.tasks import run_all_tasks
 
-API_BASE_URL = os.getenv("API_BASE_URL", "<your-active-endpoint>")
-MODEL_NAME = os.getenv("MODEL_NAME", "<your-active-model>")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
 HF_TOKEN = os.getenv("HF_TOKEN")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 
@@ -30,21 +30,31 @@ CONCENTRATION_LIMIT = 0.70
 
 
 def log_start(task: str, env: str, model: str) -> None:
-    print("[START]", flush=True)
+    print(f"[START] task={task} env={env} model={model}", flush=True)
 
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
-    print("[STEP]", flush=True)
+    error_value = error if error else "null"
+    print(
+        f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error_value}",
+        flush=True,
+    )
 
 
 def log_end(success: bool, steps: int, rewards: List[float]) -> None:
-    print("[END]", flush=True)
+    rewards_str = ",".join(f"{reward:.2f}" for reward in rewards)
+    print(
+        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
+        flush=True,
+    )
 
 
 def build_openai_client() -> OpenAI:
+    if not HF_TOKEN:
+        raise RuntimeError("HF_TOKEN is required")
     return OpenAI(
-        base_url=os.environ["API_BASE_URL"],
-        api_key=os.environ["API_KEY"],
+        base_url=API_BASE_URL,
+        api_key=HF_TOKEN,
     )
 
 
@@ -53,9 +63,8 @@ def ping_llm_proxy(client: OpenAI) -> None:
     Make a minimal routed request so validator logs confirm proxy usage.
     """
     try:
-        model = os.environ["MODEL_NAME"]
         client.chat.completions.create(
-            model=model,
+            model=MODEL_NAME,
             messages=[{"role": "user", "content": "ping"}],
             max_tokens=1,
             temperature=0,
@@ -128,28 +137,25 @@ def choose_action(state: Dict[str, Any]) -> Action:
 
 
 def run_simulation(max_steps: int = 30, seed: int = 42) -> Dict[str, Any]:
-    client = build_openai_client()
-    model = os.environ["MODEL_NAME"]
-    _ = model
-    # Unconditional proxy probe for validator compliance.
-    ping_llm_proxy(client)
-
     task_name = "finlearn-tutor"
     benchmark = "finlearn"
+    model = MODEL_NAME
     success_score_threshold = 0.5
-
-    env = FinLearnEnv(max_steps=max_steps, seed=seed)
-    observation = env.reset()
-    initial_value = observation.portfolio_value
+    log_start(task=task_name, env=benchmark, model=model)
 
     rewards: List[float] = []
     steps_taken = 0
     success = False
     score = 0.0
-
-    log_start(task=task_name, env=benchmark, model=model)
-
     try:
+        client = build_openai_client()
+        # Unconditional proxy probe for validator compliance.
+        ping_llm_proxy(client)
+
+        env = FinLearnEnv(max_steps=max_steps, seed=seed)
+        observation = env.reset()
+        initial_value = observation.portfolio_value
+
         done = False
         while not done:
             action = choose_action(observation.model_dump())
