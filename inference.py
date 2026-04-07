@@ -15,13 +15,13 @@ from env.environment import FinLearnEnv
 from env.models import Action
 from env.tasks import run_all_tasks
 
-MODEL_NAME = os.environ["MODEL_NAME"]
-LOCAL_IMAGE_NAME = os.environ["LOCAL_IMAGE_NAME"]
-TASK_NAME = os.environ["TASK_NAME"]
-BENCHMARK = os.environ["BENCHMARK"]
-MAX_STEPS = int(os.environ["MAX_STEPS"])
-SEED = int(os.environ["SEED"])
-SUCCESS_SCORE_THRESHOLD = float(os.environ["SUCCESS_SCORE_THRESHOLD"])
+MODEL_NAME = os.environ.get("MODEL_NAME", "unknown-model")
+LOCAL_IMAGE_NAME = os.environ.get("LOCAL_IMAGE_NAME", "")
+TASK_NAME = os.environ.get("TASK_NAME", "finlearn-tutor")
+BENCHMARK = os.environ.get("BENCHMARK", "finlearn")
+MAX_STEPS = int(os.environ.get("MAX_STEPS", "30"))
+SEED = int(os.environ.get("SEED", "42"))
+SUCCESS_SCORE_THRESHOLD = float(os.environ.get("SUCCESS_SCORE_THRESHOLD", "0.5"))
 
 STOCK_BUY = {"ALPHA": 1, "BETA": 2, "GAMMA": 3}
 STOCK_SELL = {"ALPHA": 4, "BETA": 5, "GAMMA": 6}
