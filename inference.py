@@ -15,13 +15,15 @@ from env.environment import FinLearnEnv
 from env.models import Action
 from env.tasks import run_all_tasks
 
-MODEL_NAME = os.environ.get("MODEL_NAME", "unknown-model")
-LOCAL_IMAGE_NAME = os.environ.get("LOCAL_IMAGE_NAME", "")
-TASK_NAME = os.environ.get("TASK_NAME", "finlearn-tutor")
-BENCHMARK = os.environ.get("BENCHMARK", "finlearn")
-MAX_STEPS = int(os.environ.get("MAX_STEPS", "30"))
-SEED = int(os.environ.get("SEED", "42"))
-SUCCESS_SCORE_THRESHOLD = float(os.environ.get("SUCCESS_SCORE_THRESHOLD", "0.5"))
+API_BASE_URL = os.getenv("API_BASE_URL", "<your-active-endpoint>")
+MODEL_NAME = os.getenv("MODEL_NAME", "<your-active-model>")
+HF_TOKEN = os.getenv("HF_TOKEN")
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
+TASK_NAME = os.getenv("TASK_NAME", "finlearn-tutor")
+BENCHMARK = os.getenv("BENCHMARK", "finlearn")
+MAX_STEPS = int(os.getenv("MAX_STEPS", "30"))
+SEED = int(os.getenv("SEED", "42"))
+SUCCESS_SCORE_THRESHOLD = float(os.getenv("SUCCESS_SCORE_THRESHOLD", "0.5"))
 
 STOCK_BUY = {"ALPHA": 1, "BETA": 2, "GAMMA": 3}
 STOCK_SELL = {"ALPHA": 4, "BETA": 5, "GAMMA": 6}
@@ -54,12 +56,10 @@ def log_end(success: bool, steps: int, rewards: List[float]) -> None:
 
 
 def build_openai_client() -> OpenAI:
-    """
-    Create the validator-compatible client using the injected proxy settings.
-    """
-    base_url = os.environ["API_BASE_URL"]
-    api_key = os.environ["API_KEY"]
-    return OpenAI(base_url=base_url, api_key=api_key)
+    return OpenAI(
+        base_url=os.environ["API_BASE_URL"],
+        api_key=os.environ["HF_TOKEN"],
+    )
 
 
 def ping_llm_proxy(client: OpenAI) -> None:
@@ -68,7 +68,7 @@ def ping_llm_proxy(client: OpenAI) -> None:
     """
     try:
         client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=MODEL_NAME,
             messages=[{"role": "user", "content": "ping"}],
             max_tokens=1,
             temperature=0,
