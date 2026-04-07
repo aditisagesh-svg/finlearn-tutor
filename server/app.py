@@ -88,12 +88,19 @@ def placeholder():
 
 @app.post("/reset")
 def reset() -> dict:
-    ping_llm_proxy(build_openai_client())
     global env
     env = FinLearnEnv(
         max_steps=getattr(env, "max_steps", 30),
         seed=getattr(env, "seed", 42),
     )
+    api_base_url = os.getenv("API_BASE_URL")
+    api_key = os.getenv("API_KEY")
+    if api_base_url and api_key:
+        try:
+            ping_llm_proxy(build_openai_client())
+        except Exception:
+            # Reset must still succeed even if the proxy ping fails.
+            pass
     observation = env.state()
     return {
         "observation": observation.model_dump(),
