@@ -268,10 +268,12 @@ The baseline passes `env.get_episode_summary()` into the graders, so task scores
 The baseline emits strict validator-friendly logs:
 
 ```text
-[START] task=task3_aggressive_optimization env=finlearn_tutor model=deterministic-baseline-v2
-[STEP] step=1 action=1 reward=-0.15 done=false error=null
-[STEP] step=2 action=1 reward=-0.14 done=false error=null
-[END] success=true steps=20 score=0.584 rewards=-0.15,-0.14,...
+[START]
+[STEP]
+[STEP]
+[STEP]
+...
+[END]
 ```
 
 ## Benchmark Positioning
@@ -288,7 +290,14 @@ That separation makes the project stronger: the environment is the benchmark, an
 
 With the default deterministic baseline (`SEED=42`, `MAX_STEPS=20`), the environment produces reproducible trajectory-aware scores.
 
-The exact values remain deterministic per seed and may evolve as the benchmark improves, but the reported outputs are always bounded in `[0.0, 1.0]` and derived from:
+Current baseline results from the checked-in simulator are:
+
+- `overall_score`: `0.4863`
+- `task1_capital_preservation`: `0.6088`
+- `task2_balanced_growth`: `0.4767`
+- `task3_aggressive_optimization`: `0.3734`
+
+The reported outputs are always bounded in `[0.0, 1.0]` and derived from:
 
 - growth over the episode
 - maximum drawdown

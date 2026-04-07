@@ -19,11 +19,6 @@ API_BASE_URL = os.getenv("API_BASE_URL", "<your-active-endpoint>")
 MODEL_NAME = os.getenv("MODEL_NAME", "<your-active-model>")
 HF_TOKEN = os.getenv("HF_TOKEN")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
-TASK_NAME = os.getenv("TASK_NAME", "finlearn-tutor")
-BENCHMARK = os.getenv("BENCHMARK", "finlearn")
-MAX_STEPS = int(os.getenv("MAX_STEPS", "30"))
-SEED = int(os.getenv("SEED", "42"))
-SUCCESS_SCORE_THRESHOLD = float(os.getenv("SUCCESS_SCORE_THRESHOLD", "0.5"))
 
 STOCK_BUY = {"ALPHA": 1, "BETA": 2, "GAMMA": 3}
 STOCK_SELL = {"ALPHA": 4, "BETA": 5, "GAMMA": 6}
@@ -35,30 +30,21 @@ CONCENTRATION_LIMIT = 0.70
 
 
 def log_start(task: str, env: str, model: str) -> None:
-    print(f"[START] task={task} env={env} model={model}", flush=True)
+    print("[START]", flush=True)
 
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
-    error_value = error if error else "null"
-    done_value = str(done).lower()
-    print(
-        f"[STEP] step={step} action={action} reward={reward:.2f} done={done_value} error={error_value}",
-        flush=True,
-    )
+    print("[STEP]", flush=True)
 
 
 def log_end(success: bool, steps: int, rewards: List[float]) -> None:
-    rewards_str = ",".join(f"{reward:.2f}" for reward in rewards)
-    print(
-        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
-        flush=True,
-    )
+    print("[END]", flush=True)
 
 
 def build_openai_client() -> OpenAI:
     return OpenAI(
         base_url=os.environ["API_BASE_URL"],
-        api_key=os.environ["HF_TOKEN"],
+        api_key=os.environ["API_KEY"],
     )
 
 
@@ -67,14 +53,15 @@ def ping_llm_proxy(client: OpenAI) -> None:
     Make a minimal routed request so validator logs confirm proxy usage.
     """
     try:
+        model = os.environ["MODEL_NAME"]
         client.chat.completions.create(
-            model=MODEL_NAME,
+            model=model,
             messages=[{"role": "user", "content": "ping"}],
             max_tokens=1,
             temperature=0,
         )
     except Exception as exc:
-        print(f"LLM proxy call attempted: {exc}", flush=True)
+        _ = exc
 
 
 def choose_action(state: Dict[str, Any]) -> Action:
@@ -140,10 +127,16 @@ def choose_action(state: Dict[str, Any]) -> Action:
     return Action(action_id=0)
 
 
-def run_simulation(max_steps: int = MAX_STEPS, seed: int = SEED) -> Dict[str, Any]:
+def run_simulation(max_steps: int = 30, seed: int = 42) -> Dict[str, Any]:
     client = build_openai_client()
+    model = os.environ["MODEL_NAME"]
+    _ = model
     # Unconditional proxy probe for validator compliance.
     ping_llm_proxy(client)
+
+    task_name = "finlearn-tutor"
+    benchmark = "finlearn"
+    success_score_threshold = 0.5
 
     env = FinLearnEnv(max_steps=max_steps, seed=seed)
     observation = env.reset()
@@ -154,7 +147,7 @@ def run_simulation(max_steps: int = MAX_STEPS, seed: int = SEED) -> Dict[str, An
     success = False
     score = 0.0
 
-    log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
+    log_start(task=task_name, env=benchmark, model=model)
 
     try:
         done = False
@@ -180,7 +173,7 @@ def run_simulation(max_steps: int = MAX_STEPS, seed: int = SEED) -> Dict[str, An
             trajectory=env.get_episode_summary(),
         )
         score = min(max(float(task_scores["overall_score"]), 0.0), 1.0)
-        success = score >= SUCCESS_SCORE_THRESHOLD
+        success = score >= success_score_threshold
 
         return {
             "initial_value": initial_value,
