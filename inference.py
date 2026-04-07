@@ -68,7 +68,7 @@ def ping_llm_proxy(client: OpenAI) -> None:
     """
     try:
         client.chat.completions.create(
-            model=os.environ["MODEL_NAME"],  # ✅ FINAL FIX
+            model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": "ping"}],
             max_tokens=1,
             temperature=0,
