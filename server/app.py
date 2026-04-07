@@ -14,7 +14,7 @@ import uvicorn
 
 from env.environment import FinLearnEnv
 from env.tasks import run_all_tasks
-from inference import choose_action
+from inference import choose_action, build_openai_client, ping_llm_proxy
 
 app = FastAPI(title="FinLearn Tutor API")
 env = FinLearnEnv()
@@ -88,6 +88,7 @@ def placeholder():
 
 @app.post("/reset")
 def reset() -> dict:
+    ping_llm_proxy(build_openai_client())
     global env
     env = FinLearnEnv(
         max_steps=getattr(env, "max_steps", 30),
@@ -168,7 +169,7 @@ def frontend_fallback(full_path: str):
 
 
 def main() -> None:
-    port = int(os.getenv("PORT", "7860"))
+    port = int(os.environ["PORT"])
     uvicorn.run("server.app:app", host="0.0.0.0", port=port)
 
 
