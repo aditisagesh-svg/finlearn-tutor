@@ -237,12 +237,12 @@ docker run --rm -p 7860:7860 finlearn-tutor
 
 The baseline inference script is `inference.py` in the repository root.
 
-It is a deterministic, lightweight benchmark baseline designed for reproducible validator runs. The script initializes an OpenAI-compatible client for hackathon compliance, while the actual action policy remains deterministic and low-compute.
+It is a deterministic, lightweight benchmark baseline designed for reproducible validator runs. The script makes a minimal OpenAI-compatible request through the injected LiteLLM proxy for validator compliance, while the action policy itself remains deterministic and low-compute.
 
 Optional environment variables:
 
 - `API_BASE_URL`
-- `HF_TOKEN`
+- `API_KEY`
 - `MODEL_NAME`
 - `TASK_NAME`
 - `BENCHMARK`
@@ -254,14 +254,14 @@ Example:
 
 ```bash
 export API_BASE_URL="https://router.huggingface.co/v1"
-export HF_TOKEN="your_token_here"
+export API_KEY="your_proxy_key_here"
 export MODEL_NAME="deterministic-baseline-v2"
 export MAX_STEPS="20"
 export SEED="42"
 python inference.py
 ```
 
-The baseline passes `env.get_episode_summary()` into the graders, so task scores reflect trajectory-aware behavior rather than only the terminal state.
+The baseline passes `env.get_episode_summary()` into the graders, so task scores reflect trajectory-aware behavior rather than only the terminal state. During validator runs, it uses the injected `API_BASE_URL` and `API_KEY` to route a minimal request through the hackathon proxy before executing the local policy.
 
 ## Inference Output Format
 
