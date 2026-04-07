@@ -68,7 +68,7 @@ def ping_llm_proxy(client: OpenAI) -> None:
     """
     try:
         client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=os.environ["MODEL_NAME"],  # ✅ FINAL FIX
             messages=[{"role": "user", "content": "ping"}],
             max_tokens=1,
             temperature=0,
@@ -144,6 +144,7 @@ def run_simulation(max_steps: int = MAX_STEPS, seed: int = SEED) -> Dict[str, An
     client = build_openai_client()
     # Unconditional proxy probe for validator compliance.
     ping_llm_proxy(client)
+
     env = FinLearnEnv(max_steps=max_steps, seed=seed)
     observation = env.reset()
     initial_value = observation.portfolio_value
