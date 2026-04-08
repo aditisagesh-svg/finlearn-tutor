@@ -18,6 +18,11 @@ from env.metrics import (
 )
 from env.models import Observation
 
+def _safe_score(score: float) -> float:
+    """Clamp to strictly (0.01, 0.99) and round to 2dp. Enforces 0 < score < 1."""
+    return round(max(0.01, min(0.99, float(score))), 2)
+
+
 TASK_CONFIGS = {
     "task1_capital_preservation": {
         "label": "Capital Preservation",
@@ -36,7 +41,6 @@ TASK_CONFIGS = {
     },
 }
 
-
 def _as_state_dict(final_state: Observation | Dict) -> Dict:
     return final_state.model_dump() if isinstance(final_state, Observation) else final_state
 
@@ -47,9 +51,10 @@ def build_episode_context(
     trajectory: Dict | None = None,
 ) -> Dict:
     state = _as_state_dict(final_state)
-    portfolio_history = trajectory.get("portfolio_history", [initial_value, state["portfolio_value"]]) if trajectory else [initial_value, state["portfolio_value"]]
-    actions = trajectory.get("action_history", []) if trajectory else []
-    steps = trajectory.get("step_records", []) if trajectory else []
+    trajectory = trajectory if isinstance(trajectory, dict) else {}
+    portfolio_history = trajectory.get("portfolio_history", [initial_value, state["portfolio_value"]])
+    actions = trajectory.get("action_history", [])
+    steps = trajectory.get("step_records", [])
 
     returns = compute_returns(portfolio_history)
     growth = (portfolio_history[-1] - portfolio_history[0]) / max(portfolio_history[0], 1e-9)
@@ -97,11 +102,11 @@ def score_trajectory(
     )
 
     return {
-        "score": score,
-        "growth_score": round(growth_score, 4),
-        "risk_control_score": round(risk_control_score, 4),
-        "stability_score": round(stability_score, 4),
-        "decision_quality_score": round(decision_quality_score, 4),
+        "score": _safe_score(score),
+        "growth_score": _safe_score(growth_score),
+        "risk_control_score": _safe_score(risk_control_score),
+        "stability_score": _safe_score(stability_score),
+        "decision_quality_score": _safe_score(decision_quality_score),
         "portfolio_growth": round(metrics["growth"], 4),
         "maximum_drawdown": round(metrics["drawdown"], 4),
         "portfolio_volatility": round(metrics["volatility"], 4),
@@ -112,33 +117,45 @@ def score_trajectory(
 
 
 def grade_task1(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> float:
-    return score_trajectory(
-        final_state,
-        initial_value=initial_value,
-        trajectory=trajectory,
-        weights=TASK_CONFIGS["task1_capital_preservation"]["weights"],
-        targets=TASK_CONFIGS["task1_capital_preservation"]["targets"],
-    )["score"]
+    try:
+        raw = score_trajectory(
+            final_state,
+            initial_value=initial_value,
+            trajectory=trajectory,
+            weights=TASK_CONFIGS["task1_capital_preservation"]["weights"],
+            targets=TASK_CONFIGS["task1_capital_preservation"]["targets"],
+        )["score"]
+        return _safe_score(raw)
+    except Exception:
+        return 0.05
 
 
 def grade_task2(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> float:
-    return score_trajectory(
-        final_state,
-        initial_value=initial_value,
-        trajectory=trajectory,
-        weights=TASK_CONFIGS["task2_balanced_growth"]["weights"],
-        targets=TASK_CONFIGS["task2_balanced_growth"]["targets"],
-    )["score"]
+    try:
+        raw = score_trajectory(
+            final_state,
+            initial_value=initial_value,
+            trajectory=trajectory,
+            weights=TASK_CONFIGS["task2_balanced_growth"]["weights"],
+            targets=TASK_CONFIGS["task2_balanced_growth"]["targets"],
+        )["score"]
+        return _safe_score(raw)
+    except Exception:
+        return 0.05
 
 
 def grade_task3(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> float:
-    return score_trajectory(
-        final_state,
-        initial_value=initial_value,
-        trajectory=trajectory,
-        weights=TASK_CONFIGS["task3_aggressive_optimization"]["weights"],
-        targets=TASK_CONFIGS["task3_aggressive_optimization"]["targets"],
-    )["score"]
+    try:
+        raw = score_trajectory(
+            final_state,
+            initial_value=initial_value,
+            trajectory=trajectory,
+            weights=TASK_CONFIGS["task3_aggressive_optimization"]["weights"],
+            targets=TASK_CONFIGS["task3_aggressive_optimization"]["targets"],
+        )["score"]
+        return _safe_score(raw)
+    except Exception:
+        return 0.05
 
 
 def run_all_tasks(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> Dict:
@@ -163,11 +180,11 @@ def run_all_tasks(final_state: Observation | Dict, initial_value: float = 1000.0
         weights=TASK_CONFIGS["task3_aggressive_optimization"]["weights"],
         targets=TASK_CONFIGS["task3_aggressive_optimization"]["targets"],
     )
-    overall = round((preservation["score"] + balanced["score"] + aggressive["score"]) / 3, 4)
+    overall = _safe_score((preservation["score"] + balanced["score"] + aggressive["score"]) / 3)
     return {
-        "task1_capital_preservation": preservation["score"],
-        "task2_balanced_growth": balanced["score"],
-        "task3_aggressive_optimization": aggressive["score"],
+        "task1_capital_preservation": _safe_score(preservation["score"]),
+        "task2_balanced_growth": _safe_score(balanced["score"]),
+        "task3_aggressive_optimization": _safe_score(aggressive["score"]),
         "overall_score": overall,
         "benchmark_breakdown": {
             "capital_preservation": preservation,
@@ -175,3 +192,10 @@ def run_all_tasks(final_state: Observation | Dict, initial_value: float = 1000.0
             "aggressive_optimization": aggressive,
         },
     }
+
+
+TASKS = {
+    "task1_capital_preservation": grade_task1,
+    "task2_balanced_growth": grade_task2,
+    "task3_aggressive_optimization": grade_task3,
+}

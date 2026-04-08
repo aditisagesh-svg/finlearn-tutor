@@ -25,9 +25,16 @@ observation_space:
   portfolio_value: float
   step: int
   learning_score: float
+  risk_appetite: str
+  investment_horizon: str
+  goal: str
   investor_profile: str
   market_regime: str
   market_event: str
+  external_signal: dict[str,str]
+  portfolio_volatility: float
+  concentration_score: float
+  max_drawdown: float
   risk_level: str
   reasoning_hint: str
   last_action_feedback: str
@@ -47,7 +54,7 @@ action_space:
 
 reward:
   type: shaped
-  range: [-1.0, 1.0]
+  range: [0.0, 1.0]
   components:
     portfolio_growth: positive
     diversification_bonus: positive
@@ -59,22 +66,25 @@ tasks:
     name: Capital Preservation
     difficulty: easy
     grader: env.tasks:grade_task1
-    score_range: [0.0, 1.0]
+    score_range: [0.01, 0.99]
   - id: task2
     name: Balanced Growth
     difficulty: medium
     grader: env.tasks:grade_task2
-    score_range: [0.0, 1.0]
+    score_range: [0.01, 0.99]
   - id: task3
     name: Aggressive Optimization
     difficulty: hard
     grader: env.tasks:grade_task3
-    score_range: [0.0, 1.0]
+    score_range: [0.01, 0.99]
 
 inference:
   script: inference.py
-  required_env: []
+  required_env:
+    - API_BASE_URL
+    - MODEL_NAME
+    - API_KEY
   output_format:
-    - "[START] ..."
-    - "[STEP] ..."
-    - "[END] ..."
+    - "[START] task=<task_name> env=<benchmark> model=<model_name>"
+    - "[STEP] step=<n> action=<action_str> reward=<0.00> done=<true|false> error=<msg|null>"
+    - "[END] success=<true|false> steps=<n> rewards=<r1,r2,...,rn>"

@@ -65,7 +65,7 @@ class FinLearnEnv:
         self.holdings = {s: 0 for s in STOCKS}
         self.step_count = 0
         self.trade_count = 0
-        self.learning_score = 0.0
+        self.learning_score = 0.05
         self.total_reward = 0.0
         self.last_hint = ""
         self._peak_value = INITIAL_CASH
@@ -163,7 +163,7 @@ class FinLearnEnv:
             risk_level=pre_risk_level,
         )
         self.total_reward += reward.value
-        self.learning_score = round(min(1.0, max(0.0, self.total_reward / 5.0)), 4)
+        self.learning_score = round(max(0.01, min(self.total_reward / 5.0, 0.99)), 2)
         self.last_action_feedback = _build_action_feedback(
             action=normalized_action,
             portfolio_return=portfolio_return,

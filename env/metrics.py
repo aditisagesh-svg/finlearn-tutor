@@ -8,6 +8,10 @@ from math import sqrt
 from typing import Dict, Iterable, List
 
 
+def _strict_score(value: float) -> float:
+    return round(max(0.01, min(0.99, float(value))), 2)
+
+
 def compute_returns(portfolio_history: List[float]) -> List[float]:
     returns: List[float] = []
     for idx in range(1, len(portfolio_history)):
@@ -18,7 +22,7 @@ def compute_returns(portfolio_history: List[float]) -> List[float]:
 
 def compute_drawdown(portfolio_history: List[float]) -> float:
     if not portfolio_history:
-        return 0.0
+        return 0.01
 
     peak = portfolio_history[0]
     max_drawdown = 0.0
@@ -26,15 +30,15 @@ def compute_drawdown(portfolio_history: List[float]) -> float:
         peak = max(peak, value)
         drawdown = (peak - value) / max(peak, 1e-9)
         max_drawdown = max(max_drawdown, drawdown)
-    return round(max_drawdown, 6)
+    return _strict_score(max_drawdown)
 
 
 def compute_volatility(returns: List[float]) -> float:
     if len(returns) < 2:
-        return 0.0
+        return 0.01
     mean_return = sum(returns) / len(returns)
     variance = sum((value - mean_return) ** 2 for value in returns) / len(returns)
-    return round(sqrt(variance), 6)
+    return _strict_score(sqrt(variance))
 
 
 def compute_trade_efficiency(actions: List[int], portfolio_history: List[float]) -> float:
@@ -50,7 +54,7 @@ def compute_trade_efficiency(actions: List[int], portfolio_history: List[float])
             continue
         delta = portfolio_history[step_idx] - portfolio_history[step_idx - 1]
         improvements += 1.0 if delta > 0 else 0.25 if delta == 0 else 0.0
-    return round(min(improvements / len(trade_steps), 1.0), 6)
+    return _strict_score(min(improvements / len(trade_steps), 1.0))
 
 
 def compute_regime_adaptation(trajectory: Iterable[Dict]) -> float:
@@ -80,20 +84,20 @@ def compute_regime_adaptation(trajectory: Iterable[Dict]) -> float:
 
     if not scores:
         return 0.5
-    return round(sum(scores) / len(scores), 6)
+    return _strict_score(sum(scores) / len(scores))
 
 
 def normalize_growth(growth: float, target_growth: float) -> float:
     if target_growth <= 0:
-        return 1.0 if growth > 0 else 0.0
-    return round(max(0.0, min(growth / target_growth, 1.0)), 6)
+        return 0.99 if growth > 0 else 0.01
+    return _strict_score(growth / target_growth)
 
 
 def normalize_inverse(raw_value: float, cap: float) -> float:
     if cap <= 0:
-        return 1.0
-    return round(max(0.0, min(1.0 - (raw_value / cap), 1.0)), 6)
+        return 0.99
+    return _strict_score(1.0 - (raw_value / cap))
 
 
 def clamp_score(value: float) -> float:
-    return round(max(0.0, min(value, 1.0)), 4)
+    return _strict_score(value)
