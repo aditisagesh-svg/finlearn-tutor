@@ -41,7 +41,6 @@ TASK_CONFIGS = {
     },
 }
 
-
 def _as_state_dict(final_state: Observation | Dict) -> Dict:
     return final_state.model_dump() if isinstance(final_state, Observation) else final_state
 
@@ -52,9 +51,10 @@ def build_episode_context(
     trajectory: Dict | None = None,
 ) -> Dict:
     state = _as_state_dict(final_state)
-    portfolio_history = trajectory.get("portfolio_history", [initial_value, state["portfolio_value"]]) if trajectory else [initial_value, state["portfolio_value"]]
-    actions = trajectory.get("action_history", []) if trajectory else []
-    steps = trajectory.get("step_records", []) if trajectory else []
+    trajectory = trajectory if isinstance(trajectory, dict) else {}
+    portfolio_history = trajectory.get("portfolio_history", [initial_value, state["portfolio_value"]])
+    actions = trajectory.get("action_history", [])
+    steps = trajectory.get("step_records", [])
 
     returns = compute_returns(portfolio_history)
     growth = (portfolio_history[-1] - portfolio_history[0]) / max(portfolio_history[0], 1e-9)
@@ -192,3 +192,10 @@ def run_all_tasks(final_state: Observation | Dict, initial_value: float = 1000.0
             "aggressive_optimization": aggressive,
         },
     }
+
+
+TASKS = {
+    "task1_capital_preservation": grade_task1,
+    "task2_balanced_growth": grade_task2,
+    "task3_aggressive_optimization": grade_task3,
+}
