@@ -66,17 +66,17 @@ tasks:
     name: Capital Preservation
     difficulty: easy
     grader: env.tasks:grade_task1
-    score_range: [0.0, 1.0]
+    score_range: [0.01, 0.99]
   - id: task2
     name: Balanced Growth
     difficulty: medium
     grader: env.tasks:grade_task2
-    score_range: [0.0, 1.0]
+    score_range: [0.01, 0.99]
   - id: task3
     name: Aggressive Optimization
     difficulty: hard
     grader: env.tasks:grade_task3
-    score_range: [0.0, 1.0]
+    score_range: [0.01, 0.99]
 
 inference:
   script: inference.py

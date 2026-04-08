@@ -36,6 +36,18 @@ TASK_CONFIGS = {
     },
 }
 
+# ── Safety helper ─────────────────────────────────────────────────────────────
+
+def _safe_score(score: float) -> float:
+    """Clamp to (0.01, 0.99) and round to 2 decimal places.
+
+    Enforces the Phase-2 rule: 0 < score < 1 (strict).
+    """
+    score = max(0.01, min(0.99, float(score)))
+    return round(score, 2)
+
+
+# ── Internal helpers ──────────────────────────────────────────────────────────
 
 def _as_state_dict(final_state: Observation | Dict) -> Dict:
     return final_state.model_dump() if isinstance(final_state, Observation) else final_state
@@ -47,7 +59,11 @@ def build_episode_context(
     trajectory: Dict | None = None,
 ) -> Dict:
     state = _as_state_dict(final_state)
-    portfolio_history = trajectory.get("portfolio_history", [initial_value, state["portfolio_value"]]) if trajectory else [initial_value, state["portfolio_value"]]
+    portfolio_history = (
+        trajectory.get("portfolio_history", [initial_value, state["portfolio_value"]])
+        if trajectory
+        else [initial_value, state["portfolio_value"]]
+    )
     actions = trajectory.get("action_history", []) if trajectory else []
     steps = trajectory.get("step_records", []) if trajectory else []
 
@@ -89,15 +105,18 @@ def score_trajectory(
     trade_score = normalize_inverse(metrics["trade_count"], targets["trade_cap"])
     decision_quality_score = clamp_score((metrics["decision_quality"] * 0.7) + (trade_score * 0.3))
 
-    score = clamp_score(
+    raw_score = clamp_score(
         growth_score * weights["growth"]
         + risk_control_score * weights["risk_control"]
         + stability_score * weights["stability"]
         + decision_quality_score * weights["decision_quality"]
     )
 
+    # Enforce strict (0, 1) bounds before returning
+    safe = _safe_score(raw_score)
+
     return {
-        "score": score,
+        "score": safe,
         "growth_score": round(growth_score, 4),
         "risk_control_score": round(risk_control_score, 4),
         "stability_score": round(stability_score, 4),
@@ -111,37 +130,72 @@ def score_trajectory(
     }
 
 
-def grade_task1(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> float:
-    return score_trajectory(
-        final_state,
-        initial_value=initial_value,
-        trajectory=trajectory,
-        weights=TASK_CONFIGS["task1_capital_preservation"]["weights"],
-        targets=TASK_CONFIGS["task1_capital_preservation"]["targets"],
-    )["score"]
+# ── Public graders ────────────────────────────────────────────────────────────
+
+def grade_task1(
+    final_state: Observation | Dict,
+    initial_value: float = 1000.0,
+    trajectory: Dict | None = None,
+) -> float:
+    """Capital Preservation grader — returns score in (0.01, 0.99)."""
+    try:
+        raw = score_trajectory(
+            final_state,
+            initial_value=initial_value,
+            trajectory=trajectory,
+            weights=TASK_CONFIGS["task1_capital_preservation"]["weights"],
+            targets=TASK_CONFIGS["task1_capital_preservation"]["targets"],
+        )["score"]
+        return _safe_score(raw)
+    except Exception:
+        return 0.05
 
 
-def grade_task2(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> float:
-    return score_trajectory(
-        final_state,
-        initial_value=initial_value,
-        trajectory=trajectory,
-        weights=TASK_CONFIGS["task2_balanced_growth"]["weights"],
-        targets=TASK_CONFIGS["task2_balanced_growth"]["targets"],
-    )["score"]
+def grade_task2(
+    final_state: Observation | Dict,
+    initial_value: float = 1000.0,
+    trajectory: Dict | None = None,
+) -> float:
+    """Balanced Growth grader — returns score in (0.01, 0.99)."""
+    try:
+        raw = score_trajectory(
+            final_state,
+            initial_value=initial_value,
+            trajectory=trajectory,
+            weights=TASK_CONFIGS["task2_balanced_growth"]["weights"],
+            targets=TASK_CONFIGS["task2_balanced_growth"]["targets"],
+        )["score"]
+        return _safe_score(raw)
+    except Exception:
+        return 0.05
 
 
-def grade_task3(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> float:
-    return score_trajectory(
-        final_state,
-        initial_value=initial_value,
-        trajectory=trajectory,
-        weights=TASK_CONFIGS["task3_aggressive_optimization"]["weights"],
-        targets=TASK_CONFIGS["task3_aggressive_optimization"]["targets"],
-    )["score"]
+def grade_task3(
+    final_state: Observation | Dict,
+    initial_value: float = 1000.0,
+    trajectory: Dict | None = None,
+) -> float:
+    """Aggressive Optimization grader — returns score in (0.01, 0.99)."""
+    try:
+        raw = score_trajectory(
+            final_state,
+            initial_value=initial_value,
+            trajectory=trajectory,
+            weights=TASK_CONFIGS["task3_aggressive_optimization"]["weights"],
+            targets=TASK_CONFIGS["task3_aggressive_optimization"]["targets"],
+        )["score"]
+        return _safe_score(raw)
+    except Exception:
+        return 0.05
 
 
-def run_all_tasks(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> Dict:
+# ── Aggregate runner ──────────────────────────────────────────────────────────
+
+def run_all_tasks(
+    final_state: Observation | Dict,
+    initial_value: float = 1000.0,
+    trajectory: Dict | None = None,
+) -> Dict:
     preservation = score_trajectory(
         final_state,
         initial_value=initial_value,
@@ -163,7 +217,12 @@ def run_all_tasks(final_state: Observation | Dict, initial_value: float = 1000.0
         weights=TASK_CONFIGS["task3_aggressive_optimization"]["weights"],
         targets=TASK_CONFIGS["task3_aggressive_optimization"]["targets"],
     )
-    overall = round((preservation["score"] + balanced["score"] + aggressive["score"]) / 3, 4)
+
+    # All individual scores are already safe; clamp overall too
+    overall = _safe_score(
+        (preservation["score"] + balanced["score"] + aggressive["score"]) / 3
+    )
+
     return {
         "task1_capital_preservation": preservation["score"],
         "task2_balanced_growth": balanced["score"],
