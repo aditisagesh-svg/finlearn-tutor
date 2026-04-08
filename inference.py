@@ -7,6 +7,7 @@ This file is intentionally strict about stdout formatting for validator compatib
 from __future__ import annotations
 
 import os
+import sys
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
@@ -55,6 +56,10 @@ def build_openai_client() -> OpenAI:
     return OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
 
+def _log_proxy_event(message: str) -> None:
+    print(message, file=sys.stderr, flush=True)
+
+
 def ping_llm_proxy(client: OpenAI) -> None:
     """
     Make a minimal routed request so validator logs confirm proxy usage.
@@ -66,8 +71,9 @@ def ping_llm_proxy(client: OpenAI) -> None:
             max_tokens=1,
             temperature=0,
         )
+        _log_proxy_event("[PROXY] ping ok")
     except Exception as exc:
-        _ = exc
+        _log_proxy_event(f"[PROXY] ping failed: {type(exc).__name__}: {exc}")
 
 
 def choose_action(state: Dict[str, Any]) -> Action:
