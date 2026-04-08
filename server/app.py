@@ -155,6 +155,16 @@ def simulation(max_steps: int = 20, seed: int = 42) -> dict:
     }
 
 
+@app.post("/run")
+def run() -> dict:
+    return simulation()
+
+
+@app.post("/simulate")
+def simulate() -> dict:
+    return simulation()
+
+
 @app.get("/{full_path:path}")
 def frontend_fallback(full_path: str):
     requested_file = FRONTEND_DIST / full_path
