@@ -190,9 +190,9 @@ def run_all_tasks(final_state: Observation | Dict, initial_value: float = 1000.0
     )
     overall = _safe_score((preservation["score"] + balanced["score"] + aggressive["score"]) / 3)
     return {
-        "task1_capital_preservation": _safe_score(preservation["score"]),
-        "task2_balanced_growth": _safe_score(balanced["score"]),
-        "task3_aggressive_optimization": _safe_score(aggressive["score"]),
+        "task1": _safe_score(preservation["score"]),
+        "task2": _safe_score(balanced["score"]),
+        "task3": _safe_score(aggressive["score"]),
         "overall_score": overall,
         "benchmark_breakdown": {
             "capital_preservation": preservation,
