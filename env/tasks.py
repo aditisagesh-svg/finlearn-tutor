@@ -125,7 +125,7 @@ def grade_task1(final_state: Observation | Dict, initial_value: float = 1000.0, 
             weights=TASK_CONFIGS["task1_capital_preservation"]["weights"],
             targets=TASK_CONFIGS["task1_capital_preservation"]["targets"],
         )["score"]
-        return _safe_score(raw)
+        return max(0.01, min(raw, 0.99))
     except Exception:
         return 0.05
 
@@ -139,7 +139,7 @@ def grade_task2(final_state: Observation | Dict, initial_value: float = 1000.0, 
             weights=TASK_CONFIGS["task2_balanced_growth"]["weights"],
             targets=TASK_CONFIGS["task2_balanced_growth"]["targets"],
         )["score"]
-        return _safe_score(raw)
+        return max(0.01, min(raw, 0.99))
     except Exception:
         return 0.05
 
@@ -153,7 +153,7 @@ def grade_task3(final_state: Observation | Dict, initial_value: float = 1000.0, 
             weights=TASK_CONFIGS["task3_aggressive_optimization"]["weights"],
             targets=TASK_CONFIGS["task3_aggressive_optimization"]["targets"],
         )["score"]
-        return _safe_score(raw)
+        return max(0.01, min(raw, 0.99))
     except Exception:
         return 0.05
 
@@ -180,11 +180,11 @@ def run_all_tasks(final_state: Observation | Dict, initial_value: float = 1000.0
         weights=TASK_CONFIGS["task3_aggressive_optimization"]["weights"],
         targets=TASK_CONFIGS["task3_aggressive_optimization"]["targets"],
     )
-    overall = round((preservation["score"] + balanced["score"] + aggressive["score"]) / 3, 4)
+    overall = max(0.01, min(round((preservation["score"] + balanced["score"] + aggressive["score"]) / 3, 4), 0.99))
     return {
-        "task1_capital_preservation": preservation["score"],
-        "task2_balanced_growth": balanced["score"],
-        "task3_aggressive_optimization": aggressive["score"],
+        "task1_capital_preservation": max(0.01, min(preservation["score"], 0.99)),
+        "task2_balanced_growth": max(0.01, min(balanced["score"], 0.99)),
+        "task3_aggressive_optimization": max(0.01, min(aggressive["score"], 0.99)),
         "overall_score": overall,
         "benchmark_breakdown": {
             "capital_preservation": preservation,
