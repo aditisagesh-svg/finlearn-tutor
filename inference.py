@@ -177,7 +177,7 @@ def run_simulation(max_steps: int = 30, seed: int = 42) -> Dict[str, Any]:
             initial_value,
             trajectory=env.get_episode_summary(),
         )
-        score = min(max(float(task_scores["overall_score"]), 0.0), 1.0)
+        score = round(max(0.01, min(float(task_scores["overall_score"]), 0.99)), 2)
         success = score >= success_score_threshold
 
         return {

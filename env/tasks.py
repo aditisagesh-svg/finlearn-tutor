@@ -102,11 +102,11 @@ def score_trajectory(
     )
 
     return {
-        "score": score,
-        "growth_score": round(growth_score, 4),
-        "risk_control_score": round(risk_control_score, 4),
-        "stability_score": round(stability_score, 4),
-        "decision_quality_score": round(decision_quality_score, 4),
+        "score": _safe_score(score),
+        "growth_score": _safe_score(growth_score),
+        "risk_control_score": _safe_score(risk_control_score),
+        "stability_score": _safe_score(stability_score),
+        "decision_quality_score": _safe_score(decision_quality_score),
         "portfolio_growth": round(metrics["growth"], 4),
         "maximum_drawdown": round(metrics["drawdown"], 4),
         "portfolio_volatility": round(metrics["volatility"], 4),
@@ -125,7 +125,7 @@ def grade_task1(final_state: Observation | Dict, initial_value: float = 1000.0, 
             weights=TASK_CONFIGS["task1_capital_preservation"]["weights"],
             targets=TASK_CONFIGS["task1_capital_preservation"]["targets"],
         )["score"]
-        return max(0.01, min(raw, 0.99))
+        return _safe_score(raw)
     except Exception:
         return 0.05
 
@@ -139,7 +139,7 @@ def grade_task2(final_state: Observation | Dict, initial_value: float = 1000.0, 
             weights=TASK_CONFIGS["task2_balanced_growth"]["weights"],
             targets=TASK_CONFIGS["task2_balanced_growth"]["targets"],
         )["score"]
-        return max(0.01, min(raw, 0.99))
+        return _safe_score(raw)
     except Exception:
         return 0.05
 
@@ -153,7 +153,7 @@ def grade_task3(final_state: Observation | Dict, initial_value: float = 1000.0, 
             weights=TASK_CONFIGS["task3_aggressive_optimization"]["weights"],
             targets=TASK_CONFIGS["task3_aggressive_optimization"]["targets"],
         )["score"]
-        return max(0.01, min(raw, 0.99))
+        return _safe_score(raw)
     except Exception:
         return 0.05
 
@@ -180,11 +180,11 @@ def run_all_tasks(final_state: Observation | Dict, initial_value: float = 1000.0
         weights=TASK_CONFIGS["task3_aggressive_optimization"]["weights"],
         targets=TASK_CONFIGS["task3_aggressive_optimization"]["targets"],
     )
-    overall = max(0.01, min(round((preservation["score"] + balanced["score"] + aggressive["score"]) / 3, 4), 0.99))
+    overall = _safe_score((preservation["score"] + balanced["score"] + aggressive["score"]) / 3)
     return {
-        "task1_capital_preservation": max(0.01, min(preservation["score"], 0.99)),
-        "task2_balanced_growth": max(0.01, min(balanced["score"], 0.99)),
-        "task3_aggressive_optimization": max(0.01, min(aggressive["score"], 0.99)),
+        "task1_capital_preservation": _safe_score(preservation["score"]),
+        "task2_balanced_growth": _safe_score(balanced["score"]),
+        "task3_aggressive_optimization": _safe_score(aggressive["score"]),
         "overall_score": overall,
         "benchmark_breakdown": {
             "capital_preservation": preservation,

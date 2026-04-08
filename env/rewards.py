@@ -15,6 +15,10 @@ from env.models import Reward
 TRANSACTION_COST = 1.0   # flat fee per executed trade
 
 
+def _safe_reward(value: float) -> float:
+    return round(max(0.01, min(0.99, float(value))), 2)
+
+
 def calculate_reward(
     prev_portfolio_value: float,
     curr_portfolio_value: float,
@@ -111,7 +115,7 @@ def calculate_reward(
         - profile_penalty
     )
     return Reward(
-        value=round(max(0.0, min(1.0, reward_value)), 2),
+        value=_safe_reward(reward_value),
         portfolio_growth=round(growth_reward, 2),
         diversification_bonus=round(diversification_bonus, 2),
         concentration_penalty=round(concentration_penalty, 2),
