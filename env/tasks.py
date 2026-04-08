@@ -4,6 +4,7 @@ Trajectory-aware task graders for FinLearn Tutor.
 
 from __future__ import annotations
 
+import math
 from typing import Dict
 
 from env.metrics import (
@@ -20,7 +21,13 @@ from env.models import Observation
 
 def _safe_score(score: float) -> float:
     """Clamp to strictly (0.01, 0.99) and round to 2dp. Enforces 0 < score < 1."""
-    return round(max(0.01, min(0.99, float(score))), 2)
+    try:
+        value = float(score)
+        if math.isnan(value) or math.isinf(value):
+            return 0.5
+        return round(max(0.01, min(0.99, value)), 2)
+    except Exception:
+        return 0.5
 
 
 TASK_CONFIGS = {
@@ -100,6 +107,7 @@ def score_trajectory(
         + stability_score * weights["stability"]
         + decision_quality_score * weights["decision_quality"]
     )
+    score = _safe_score(score)
 
     return {
         "score": _safe_score(score),
