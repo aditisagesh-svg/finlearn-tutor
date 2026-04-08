@@ -50,11 +50,9 @@ def log_end(success: bool, steps: int, rewards: List[float]) -> None:
 
 
 def build_openai_client() -> OpenAI:
-    if not os.getenv("API_BASE_URL"):
-        raise RuntimeError("API_BASE_URL is required")
     if not HF_TOKEN:
         raise RuntimeError("HF_TOKEN is required")
-    return OpenAI(base_url=os.getenv("API_BASE_URL"), api_key=os.getenv("HF_TOKEN"))
+    return OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
 
 def ping_llm_proxy(client: OpenAI) -> None:
