@@ -59,7 +59,9 @@ def build_episode_context(
 ) -> Dict:
     state = _as_state_dict(final_state)
     trajectory = trajectory if isinstance(trajectory, dict) else {}
-    portfolio_history = trajectory.get("portfolio_history", [initial_value, state["portfolio_value"]])
+    portfolio_history = trajectory.get("portfolio_history")
+    if not portfolio_history:
+        portfolio_history = [initial_value, state["portfolio_value"]]
     actions = trajectory.get("action_history", [])
     steps = trajectory.get("step_records", [])
 
