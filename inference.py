@@ -17,7 +17,7 @@ from env.tasks import run_all_tasks
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
-API_KEY = os.getenv("API_KEY")
+HF_TOKEN = os.getenv("HF_TOKEN")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 
 STOCK_BUY = {"ALPHA": 1, "BETA": 2, "GAMMA": 3}
@@ -52,9 +52,9 @@ def log_end(success: bool, steps: int, rewards: List[float]) -> None:
 def build_openai_client() -> OpenAI:
     if not os.getenv("API_BASE_URL"):
         raise RuntimeError("API_BASE_URL is required")
-    if not API_KEY:
-        raise RuntimeError("API_KEY is required")
-    return OpenAI(base_url=os.getenv("API_BASE_URL"), api_key=os.getenv("API_KEY"))
+    if not HF_TOKEN:
+        raise RuntimeError("HF_TOKEN is required")
+    return OpenAI(base_url=os.getenv("API_BASE_URL"), api_key=os.getenv("HF_TOKEN"))
 
 
 def ping_llm_proxy(client: OpenAI) -> None:
