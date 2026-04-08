@@ -18,6 +18,11 @@ from env.metrics import (
 )
 from env.models import Observation
 
+def _safe_score(score: float) -> float:
+    """Clamp to strictly (0.01, 0.99) and round to 2dp. Enforces 0 < score < 1."""
+    return round(max(0.01, min(0.99, float(score))), 2)
+
+
 TASK_CONFIGS = {
     "task1_capital_preservation": {
         "label": "Capital Preservation",
@@ -89,13 +94,12 @@ def score_trajectory(
     trade_score = normalize_inverse(metrics["trade_count"], targets["trade_cap"])
     decision_quality_score = clamp_score((metrics["decision_quality"] * 0.7) + (trade_score * 0.3))
 
-    raw_score = clamp_score(
+    score = clamp_score(
         growth_score * weights["growth"]
         + risk_control_score * weights["risk_control"]
         + stability_score * weights["stability"]
         + decision_quality_score * weights["decision_quality"]
     )
-    score = round(max(0.01, min(0.99, float(raw_score))), 2)
 
     return {
         "score": score,
@@ -112,11 +116,6 @@ def score_trajectory(
     }
 
 
-def _safe(score: float) -> float:
-    """Enforce strict (0, 1) — validator rejects 0.0 and 1.0."""
-    return round(max(0.01, min(0.99, float(score))), 2)
-
-
 def grade_task1(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> float:
     try:
         raw = score_trajectory(
@@ -126,7 +125,7 @@ def grade_task1(final_state: Observation | Dict, initial_value: float = 1000.0, 
             weights=TASK_CONFIGS["task1_capital_preservation"]["weights"],
             targets=TASK_CONFIGS["task1_capital_preservation"]["targets"],
         )["score"]
-        return _safe(raw)
+        return _safe_score(raw)
     except Exception:
         return 0.05
 
@@ -140,7 +139,7 @@ def grade_task2(final_state: Observation | Dict, initial_value: float = 1000.0, 
             weights=TASK_CONFIGS["task2_balanced_growth"]["weights"],
             targets=TASK_CONFIGS["task2_balanced_growth"]["targets"],
         )["score"]
-        return _safe(raw)
+        return _safe_score(raw)
     except Exception:
         return 0.05
 
@@ -154,7 +153,7 @@ def grade_task3(final_state: Observation | Dict, initial_value: float = 1000.0, 
             weights=TASK_CONFIGS["task3_aggressive_optimization"]["weights"],
             targets=TASK_CONFIGS["task3_aggressive_optimization"]["targets"],
         )["score"]
-        return _safe(raw)
+        return _safe_score(raw)
     except Exception:
         return 0.05
 
@@ -181,7 +180,7 @@ def run_all_tasks(final_state: Observation | Dict, initial_value: float = 1000.0
         weights=TASK_CONFIGS["task3_aggressive_optimization"]["weights"],
         targets=TASK_CONFIGS["task3_aggressive_optimization"]["targets"],
     )
-    overall = round(max(0.01, min(0.99, (preservation["score"] + balanced["score"] + aggressive["score"]) / 3)), 2)
+    overall = round((preservation["score"] + balanced["score"] + aggressive["score"]) / 3, 4)
     return {
         "task1_capital_preservation": preservation["score"],
         "task2_balanced_growth": balanced["score"],
