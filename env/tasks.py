@@ -195,7 +195,7 @@ def run_all_tasks(final_state: Observation | Dict, initial_value: float = 1000.0
 
 
 TASKS = {
-    "task1_capital_preservation": grade_task1,
-    "task2_balanced_growth": grade_task2,
-    "task3_aggressive_optimization": grade_task3,
+    "task1": grade_task1,
+    "task2": grade_task2,
+    "task3": grade_task3,
 }
