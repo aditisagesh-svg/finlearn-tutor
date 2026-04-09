@@ -173,6 +173,78 @@ def simulate() -> dict:
     return run()
 
 
+@app.get("/tasks")
+def get_tasks() -> list:
+    """
+    Validator discovery endpoint.
+    Must return ≥ 3 tasks with score_range strictly inside (0, 1).
+    """
+    return [
+        {
+            "id": "capital_preservation",
+            "name": "Capital Preservation",
+            "difficulty": "easy",
+            "score_range": [0.01, 0.99],
+        },
+        {
+            "id": "balanced_growth",
+            "name": "Balanced Growth",
+            "difficulty": "medium",
+            "score_range": [0.01, 0.99],
+        },
+        {
+            "id": "aggressive_optimization",
+            "name": "Aggressive Optimization",
+            "difficulty": "hard",
+            "score_range": [0.01, 0.99],
+        },
+    ]
+
+
+@app.post("/grader")
+def grader(payload: dict) -> dict:
+    """
+    Validator grading endpoint.
+    Accepts {task_id, final_state, initial_value, trajectory}
+    Returns {task_id, score} with score strictly in (0.01, 0.99).
+    """
+    import math
+
+    def _safe(x: float) -> float:
+        try:
+            v = float(x)
+            if math.isnan(v) or math.isinf(v):
+                return 0.50
+            return round(max(0.01, min(0.99, v)), 2)
+        except Exception:
+            return 0.50
+
+    from env.tasks import grade_task1, grade_task2, grade_task3
+
+    GRADERS = {
+        "capital_preservation": grade_task1,
+        "balanced_growth": grade_task2,
+        "aggressive_optimization": grade_task3,
+    }
+
+    task_id = payload.get("task_id", "")
+    final_state = payload.get("final_state") or payload.get("observation") or {}
+    initial_value = float(payload.get("initial_value", 1000.0))
+    trajectory = payload.get("trajectory") or {}
+
+    if task_id not in GRADERS:
+        # Return a safe fallback score rather than 404 — never let validator crash
+        return {"task_id": task_id, "score": 0.50, "error": f"unknown task_id: {task_id}"}
+
+    try:
+        raw = GRADERS[task_id](final_state, initial_value, trajectory)
+        score = _safe(raw)
+    except Exception as exc:
+        score = 0.05
+
+    return {"task_id": task_id, "score": score}
+
+
 @app.get("/{full_path:path}")
 def frontend_fallback(full_path: str):
     requested_file = FRONTEND_DIST / full_path
