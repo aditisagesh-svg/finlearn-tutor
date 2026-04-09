@@ -4,7 +4,7 @@ Loaded by validator as: env.tasks
 """
 from __future__ import annotations
 import math
-from typing import Dict
+from typing import Any, Callable, Dict
 
 from env.metrics import (
     clamp_score, compute_drawdown, compute_regime_adaptation,
@@ -124,4 +124,18 @@ def run_all_tasks(final_state, initial_value=1000.0, trajectory=None) -> Dict:
     }
 
 
-TASKS = {"task1": grade_task1, "task2": grade_task2, "task3": grade_task3}
+
+
+class Task:
+    """Task definition for FinLearn validator."""
+
+    def __init__(self, name: str, grader: Callable[[Any, Any, Any], float]):
+        self.name = name
+        self.grader = grader
+
+
+TASKS = [
+    Task(name="task1_capital_preservation", grader=grade_task1),
+    Task(name="task2_balanced_growth", grader=grade_task2),
+    Task(name="task3_aggressive_optimization", grader=grade_task3),
+]
