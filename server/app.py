@@ -184,18 +184,21 @@ def get_tasks() -> list:
             "id": "capital_preservation",
             "name": "Capital Preservation",
             "difficulty": "easy",
+            "grader": "grade_task1",
             "score_range": [0.01, 0.99],
         },
         {
             "id": "balanced_growth",
             "name": "Balanced Growth",
             "difficulty": "medium",
+            "grader": "grade_task2",
             "score_range": [0.01, 0.99],
         },
         {
             "id": "aggressive_optimization",
             "name": "Aggressive Optimization",
             "difficulty": "hard",
+            "grader": "grade_task3",
             "score_range": [0.01, 0.99],
         },
     ]
