@@ -262,6 +262,9 @@ def run_all_tasks(
 # ── Task registry (used by any framework that discovers graders via TASKS) ────
 
 TASKS = {
+    "task1": grade_task1,
+    "task2": grade_task2,
+    "task3": grade_task3,
     "capital_preservation": grade_task1,
     "balanced_growth": grade_task2,
     "aggressive_optimization": grade_task3,
