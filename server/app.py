@@ -204,7 +204,7 @@ def get_tasks() -> list:
 @app.post("/grader")
 def grader(payload: dict) -> dict:
     """
-    Validator grading endpoint — fully self-contained, zero risky imports.
+    Validator grading endpoint.
     Accepts {task_id, ...}
     Returns {task_id, score} with score strictly in (0.01, 0.99).
     """
@@ -219,15 +219,8 @@ def grader(payload: dict) -> dict:
         except Exception:
             return 0.50
 
-    TASK_SCORES = {
-        "capital_preservation":    0.61,
-        "balanced_growth":         0.48,
-        "aggressive_optimization": 0.37,
-    }
-
     task_id = payload.get("task_id", "")
 
-    # Try to call the real grader; fall back to deterministic safe score
     try:
         from env.tasks import grade_task1, grade_task2, grade_task3
         GRADERS = {
@@ -239,14 +232,10 @@ def grader(payload: dict) -> dict:
         initial_value = float(payload.get("initial_value", 1000.0))
         trajectory    = payload.get("trajectory") or {}
 
-        if task_id in GRADERS:
-            raw   = GRADERS[task_id](final_state, initial_value, trajectory)
-            score = _safe(raw)
-        else:
-            score = _safe(TASK_SCORES.get(task_id, 0.50))
+        raw = GRADERS[task_id](final_state, initial_value, trajectory)
+        score = _safe(raw)
     except Exception:
-        # env.tasks unavailable or grader crashed — use hardcoded safe baseline
-        score = _safe(TASK_SCORES.get(task_id, 0.50))
+        score = 0.05
 
     return {"task_id": task_id, "score": score}
 

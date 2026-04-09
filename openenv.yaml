@@ -1,5 +1,5 @@
 name: FinLearnTutor
-version: "1.1.1"
+version: "1.1.0"
 description: >
   OpenEnv-compatible financial decision-making environment for evaluating
   agents on trajectory-aware portfolio growth, regime adaptation, and risk control.
@@ -64,13 +64,19 @@ reward:
 tasks:
   - id: capital_preservation
     name: Capital Preservation
+    difficulty: easy
     grader: env.tasks:grade_task1
+    score_range: [0.01, 0.99]
   - id: balanced_growth
     name: Balanced Growth
+    difficulty: medium
     grader: env.tasks:grade_task2
+    score_range: [0.01, 0.99]
   - id: aggressive_optimization
     name: Aggressive Optimization
+    difficulty: hard
     grader: env.tasks:grade_task3
+    score_range: [0.01, 0.99]
 
 inference:
   script: inference.py
