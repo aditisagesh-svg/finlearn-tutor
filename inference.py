@@ -16,6 +16,8 @@ from env.environment import FinLearnEnv
 from env.models import Action
 from env.tasks import run_all_tasks
 
+print("[DEBUG] inference.py STARTED", file=sys.stderr, flush=True)
+
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 
@@ -40,10 +42,10 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     )
 
 
-def log_end(success: bool, steps: int, rewards: List[float]) -> None:
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{reward:.2f}" for reward in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
+        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}",
         flush=True,
     )
 
@@ -139,11 +141,13 @@ def choose_action(state: Dict[str, Any]) -> Action:
     return Action(action_id=0)
 
 
-def run_simulation(max_steps: int = 30, seed: int = 42) -> Dict[str, Any]:
-    task_name = "finlearn-tutor"
-    benchmark = "finlearn"
+def run_simulation(max_steps: int | None = None, seed: int | None = None) -> Dict[str, Any]:
+    task_name = os.getenv("TASK_NAME", "finlearn-tutor")
+    benchmark = os.getenv("BENCHMARK", "finlearn")
     model = MODEL_NAME
-    success_score_threshold = 0.5
+    success_score_threshold = float(os.getenv("SUCCESS_SCORE_THRESHOLD", "0.5"))
+    max_steps = int(os.getenv("MAX_STEPS", "30")) if max_steps is None else max_steps
+    seed = int(os.getenv("SEED", "42")) if seed is None else seed
     log_start(task=task_name, env=benchmark, model=model)
 
     rewards: List[float] = []
@@ -195,7 +199,7 @@ def run_simulation(max_steps: int = 30, seed: int = 42) -> Dict[str, Any]:
             "success": success,
         }
     finally:
-        log_end(success=success, steps=steps_taken, rewards=rewards)
+        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
 
 if __name__ == "__main__":
