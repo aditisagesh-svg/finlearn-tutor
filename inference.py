@@ -16,8 +16,6 @@ from env.environment import FinLearnEnv
 from env.models import Action
 from env.tasks import run_all_tasks
 
-print("[DEBUG] inference.py STARTED", file=sys.stderr, flush=True)
-
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 
