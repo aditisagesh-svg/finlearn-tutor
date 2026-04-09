@@ -1,5 +1,5 @@
 name: FinLearnTutor
-version: "1.1.0"
+version: "1.1.1"
 description: >
   OpenEnv-compatible financial decision-making environment for evaluating
   agents on trajectory-aware portfolio growth, regime adaptation, and risk control.
