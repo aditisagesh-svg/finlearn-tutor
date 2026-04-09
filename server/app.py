@@ -161,9 +161,9 @@ def run() -> dict:
     task_scores = result.get("task_scores", {})
     return {
         "task_scores": {
-            "task1": float(task_scores.get("task1", 0.5)),
-            "task2": float(task_scores.get("task2", 0.5)),
-            "task3": float(task_scores.get("task3", 0.5)),
+            "capital_preservation": float(task_scores.get("capital_preservation", 0.5)),
+            "balanced_growth": float(task_scores.get("balanced_growth", 0.5)),
+            "aggressive_optimization": float(task_scores.get("aggressive_optimization", 0.5)),
         }
     }
 
