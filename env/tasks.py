@@ -1,5 +1,6 @@
 """
 Trajectory-aware task graders for FinLearn Tutor.
+This file is loaded by the OpenEnv validator as: env.tasks
 """
 
 from __future__ import annotations
@@ -19,16 +20,20 @@ from env.metrics import (
 )
 from env.models import Observation
 
+
+# ── Safety clamp: enforces 0 < score < 1 strictly ────────────────────────────
+
 def _safe_score(score: float) -> float:
-    """Clamp to strictly (0.01, 0.99) and round to 2dp. Enforces 0 < score < 1."""
     try:
         value = float(score)
         if math.isnan(value) or math.isinf(value):
-            return 0.5
+            return 0.50
         return round(max(0.01, min(0.99, value)), 2)
     except Exception:
-        return 0.5
+        return 0.50
 
+
+# ── Task configuration ────────────────────────────────────────────────────────
 
 TASK_CONFIGS = {
     "task1_capital_preservation": {
@@ -47,6 +52,9 @@ TASK_CONFIGS = {
         "targets": {"growth": 0.18, "drawdown_cap": 0.28, "vol_cap": 0.05, "trade_cap": 16},
     },
 }
+
+
+# ── Internal helpers ──────────────────────────────────────────────────────────
 
 def _as_state_dict(final_state: Observation | Dict) -> Dict:
     return final_state.model_dump() if isinstance(final_state, Observation) else final_state
@@ -93,40 +101,50 @@ def score_trajectory(
     weights: Dict[str, float] | None = None,
     targets: Dict[str, float] | None = None,
 ) -> Dict[str, float]:
-    metrics = build_episode_context(final_state, initial_value=initial_value, trajectory=trajectory)
+    metrics = build_episode_context(
+        final_state, initial_value=initial_value, trajectory=trajectory
+    )
     weights = weights or TASK_CONFIGS["task2_balanced_growth"]["weights"]
     targets = targets or TASK_CONFIGS["task2_balanced_growth"]["targets"]
 
-    growth_score = normalize_growth(metrics["growth"], targets["growth"])
-    risk_control_score = normalize_inverse(metrics["drawdown"], targets["drawdown_cap"])
-    stability_score = normalize_inverse(metrics["volatility"], targets["vol_cap"])
-    trade_score = normalize_inverse(metrics["trade_count"], targets["trade_cap"])
-    decision_quality_score = clamp_score((metrics["decision_quality"] * 0.7) + (trade_score * 0.3))
+    growth_score        = normalize_growth(metrics["growth"], targets["growth"])
+    risk_control_score  = normalize_inverse(metrics["drawdown"], targets["drawdown_cap"])
+    stability_score     = normalize_inverse(metrics["volatility"], targets["vol_cap"])
+    trade_score         = normalize_inverse(metrics["trade_count"], targets["trade_cap"])
+    decision_quality_score = clamp_score(
+        (metrics["decision_quality"] * 0.7) + (trade_score * 0.3)
+    )
 
-    score = clamp_score(
-        growth_score * weights["growth"]
+    raw = clamp_score(
+        growth_score       * weights["growth"]
         + risk_control_score * weights["risk_control"]
-        + stability_score * weights["stability"]
+        + stability_score    * weights["stability"]
         + decision_quality_score * weights["decision_quality"]
     )
-    score = _safe_score(score)
 
     return {
-        "score": _safe_score(score),
-        "growth_score": _safe_score(growth_score),
-        "risk_control_score": _safe_score(risk_control_score),
-        "stability_score": _safe_score(stability_score),
+        "score":                 _safe_score(raw),
+        "growth_score":          _safe_score(growth_score),
+        "risk_control_score":    _safe_score(risk_control_score),
+        "stability_score":       _safe_score(stability_score),
         "decision_quality_score": _safe_score(decision_quality_score),
-        "portfolio_growth": round(metrics["growth"], 4),
-        "maximum_drawdown": round(metrics["drawdown"], 4),
-        "portfolio_volatility": round(metrics["volatility"], 4),
-        "trade_count": metrics["trade_count"],
-        "trade_efficiency": round(metrics["trade_efficiency"], 4),
-        "regime_adaptation": round(metrics["regime_adaptation"], 4),
+        "portfolio_growth":      round(metrics["growth"], 4),
+        "maximum_drawdown":      round(metrics["drawdown"], 4),
+        "portfolio_volatility":  round(metrics["volatility"], 4),
+        "trade_count":           metrics["trade_count"],
+        "trade_efficiency":      round(metrics["trade_efficiency"], 4),
+        "regime_adaptation":     round(metrics["regime_adaptation"], 4),
     }
 
 
-def grade_task1(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> float:
+# ── Public graders (imported by validator as env.tasks:grade_taskN) ───────────
+
+def grade_task1(
+    final_state: Observation | Dict,
+    initial_value: float = 1000.0,
+    trajectory: Dict | None = None,
+) -> float:
+    """Capital Preservation — score strictly in (0.01, 0.99)."""
     try:
         raw = score_trajectory(
             final_state,
@@ -140,7 +158,12 @@ def grade_task1(final_state: Observation | Dict, initial_value: float = 1000.0, 
         return 0.05
 
 
-def grade_task2(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> float:
+def grade_task2(
+    final_state: Observation | Dict,
+    initial_value: float = 1000.0,
+    trajectory: Dict | None = None,
+) -> float:
+    """Balanced Growth — score strictly in (0.01, 0.99)."""
     try:
         raw = score_trajectory(
             final_state,
@@ -154,7 +177,12 @@ def grade_task2(final_state: Observation | Dict, initial_value: float = 1000.0, 
         return 0.05
 
 
-def grade_task3(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> float:
+def grade_task3(
+    final_state: Observation | Dict,
+    initial_value: float = 1000.0,
+    trajectory: Dict | None = None,
+) -> float:
+    """Aggressive Optimization — score strictly in (0.01, 0.99)."""
     try:
         raw = score_trajectory(
             final_state,
@@ -168,41 +196,70 @@ def grade_task3(final_state: Observation | Dict, initial_value: float = 1000.0, 
         return 0.05
 
 
-def run_all_tasks(final_state: Observation | Dict, initial_value: float = 1000.0, trajectory: Dict | None = None) -> Dict:
-    preservation = score_trajectory(
-        final_state,
-        initial_value=initial_value,
-        trajectory=trajectory,
-        weights=TASK_CONFIGS["task1_capital_preservation"]["weights"],
-        targets=TASK_CONFIGS["task1_capital_preservation"]["targets"],
-    )
-    balanced = score_trajectory(
-        final_state,
-        initial_value=initial_value,
-        trajectory=trajectory,
-        weights=TASK_CONFIGS["task2_balanced_growth"]["weights"],
-        targets=TASK_CONFIGS["task2_balanced_growth"]["targets"],
-    )
-    aggressive = score_trajectory(
-        final_state,
-        initial_value=initial_value,
-        trajectory=trajectory,
-        weights=TASK_CONFIGS["task3_aggressive_optimization"]["weights"],
-        targets=TASK_CONFIGS["task3_aggressive_optimization"]["targets"],
-    )
-    overall = _safe_score((preservation["score"] + balanced["score"] + aggressive["score"]) / 3)
+# ── Aggregate runner — output keys must match validator's expected structure ──
+
+def run_all_tasks(
+    final_state: Observation | Dict,
+    initial_value: float = 1000.0,
+    trajectory: Dict | None = None,
+) -> Dict:
+    """
+    Returns a flat dict with top-level score keys that the validator reads directly.
+
+    Required structure (validator checks these exact top-level keys):
+        {
+            "capital_preservation":    float,   # task1 score
+            "balanced_growth":         float,   # task2 score
+            "aggressive_optimization": float,   # task3 score
+            "overall_score":           float,
+        }
+    """
+    try:
+        t1 = score_trajectory(
+            final_state, initial_value=initial_value, trajectory=trajectory,
+            weights=TASK_CONFIGS["task1_capital_preservation"]["weights"],
+            targets=TASK_CONFIGS["task1_capital_preservation"]["targets"],
+        )
+    except Exception:
+        t1 = {"score": 0.05}
+
+    try:
+        t2 = score_trajectory(
+            final_state, initial_value=initial_value, trajectory=trajectory,
+            weights=TASK_CONFIGS["task2_balanced_growth"]["weights"],
+            targets=TASK_CONFIGS["task2_balanced_growth"]["targets"],
+        )
+    except Exception:
+        t2 = {"score": 0.05}
+
+    try:
+        t3 = score_trajectory(
+            final_state, initial_value=initial_value, trajectory=trajectory,
+            weights=TASK_CONFIGS["task3_aggressive_optimization"]["weights"],
+            targets=TASK_CONFIGS["task3_aggressive_optimization"]["targets"],
+        )
+    except Exception:
+        t3 = {"score": 0.05}
+
+    s1 = _safe_score(t1["score"])
+    s2 = _safe_score(t2["score"])
+    s3 = _safe_score(t3["score"])
+    overall = _safe_score((s1 + s2 + s3) / 3.0)
+
     return {
-        "task1": _safe_score(preservation["score"]),
-        "task2": _safe_score(balanced["score"]),
-        "task3": _safe_score(aggressive["score"]),
-        "overall_score": overall,
-        "benchmark_breakdown": {
-            "capital_preservation": preservation,
-            "balanced_growth": balanced,
-            "aggressive_optimization": aggressive,
-        },
+        # ── Flat top-level keys the validator reads ──────────────────────────
+        "capital_preservation":    s1,
+        "balanced_growth":         s2,
+        "aggressive_optimization": s3,
+        "overall_score":           overall,
+        # ── Legacy keys kept for inference.py compatibility ──────────────────
+        "task1_capital_preservation": s1,
+        "task2_balanced_growth":      s2,
+        "task3_aggressive_optimization": s3,
     }
 
+
+# ── Task registry (used by any framework that discovers graders via TASKS) ────
 
 TASKS = {
     "task1": grade_task1,
