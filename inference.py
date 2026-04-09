@@ -40,10 +40,21 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     )
 
 
-def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+def log_end(
+    success: bool,
+    steps: int,
+    score: float,
+    rewards: List[float],
+    task_scores: Dict[str, float],
+) -> None:
     rewards_str = ",".join(f"{reward:.2f}" for reward in rewards)
+    task_scores_str = " ".join(
+        f"{task}={max(0.01, min(float(task_score), 0.99)):.3f}"
+        for task, task_score in task_scores.items()
+        if task in {"capital_preservation", "balanced_growth", "aggressive_optimization"}
+    )
     print(
-        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}",
+        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} {task_scores_str} rewards={rewards_str}",
         flush=True,
     )
 
@@ -197,7 +208,13 @@ def run_simulation(max_steps: int | None = None, seed: int | None = None) -> Dic
             "success": success,
         }
     finally:
-        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+        log_end(
+            success=success,
+            steps=steps_taken,
+            score=score,
+            rewards=rewards,
+            task_scores=task_scores,
+        )
 
 
 if __name__ == "__main__":
