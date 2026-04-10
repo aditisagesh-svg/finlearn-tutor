@@ -11,9 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
+from pydantic import BaseModel
 
 from env.environment import FinLearnEnv
 from env.tasks import run_all_tasks
+from env.models import Observation
 from inference import choose_action
 
 app = FastAPI(title="FinLearn Tutor API")
@@ -179,36 +181,42 @@ def get_tasks() -> list:
     Validator discovery endpoint.
     Must return ≥ 3 tasks with score_range strictly inside (0, 1).
     """
-    return [
-        {
-            "id": "capital_preservation",
-            "name": "Capital Preservation",
-            "difficulty": "easy",
-            "grader": "grade_task1",
-            "score_range": [0.01, 0.99],
-        },
-        {
-            "id": "balanced_growth",
-            "name": "Balanced Growth",
-            "difficulty": "medium",
-            "grader": "grade_task2",
-            "score_range": [0.01, 0.99],
-        },
-        {
-            "id": "aggressive_optimization",
-            "name": "Aggressive Optimization",
-            "difficulty": "hard",
-            "grader": "grade_task3",
-            "score_range": [0.01, 0.99],
-        },
-    ]
+    return {
+        "tasks": [
+            {
+                "id": "task1",
+                "name": "Capital Preservation",
+                "difficulty": "easy",
+                "score_range": [0.01, 0.99],
+            },
+            {
+                "id": "task2",
+                "name": "Balanced Growth",
+                "difficulty": "medium",
+                "score_range": [0.01, 0.99],
+            },
+            {
+                "id": "task3",
+                "name": "Aggressive Optimization",
+                "difficulty": "hard",
+                "score_range": [0.01, 0.99],
+            },
+        ]
+    }
+
+
+class GraderRequest(BaseModel):
+    task_id: str
+    observation: dict
+    initial_value: float = 1000.0
+    trajectory: dict = {}
 
 
 @app.post("/grader")
-def grader(payload: dict) -> dict:
+async def grader(request: GraderRequest):
     """
     Validator grading endpoint.
-    Accepts {task_id, ...}
+    Accepts {task_id, observation, initial_value, trajectory}
     Returns {task_id, score} with score strictly in (0.01, 0.99).
     """
     import math
@@ -222,25 +230,20 @@ def grader(payload: dict) -> dict:
         except Exception:
             return 0.50
 
-    task_id = payload.get("task_id", "")
+    from env.tasks import grade_task1, grade_task2, grade_task3
 
-    try:
-        from env.tasks import grade_task1, grade_task2, grade_task3
-        GRADERS = {
-            "capital_preservation":    grade_task1,
-            "balanced_growth":         grade_task2,
-            "aggressive_optimization": grade_task3,
-        }
-        final_state   = payload.get("final_state") or payload.get("observation") or {}
-        initial_value = float(payload.get("initial_value", 1000.0))
-        trajectory    = payload.get("trajectory") or {}
+    graders = {
+        "task1": grade_task1,
+        "task2": grade_task2,
+        "task3": grade_task3,
+    }
+    fn = graders.get(request.task_id)
+    if fn is None:
+        raise HTTPException(status_code=404, detail=f"Unknown task_id: {request.task_id}")
 
-        raw = GRADERS[task_id](final_state, initial_value, trajectory)
-        score = _safe(raw)
-    except Exception:
-        score = 0.05
-
-    return {"task_id": task_id, "score": score}
+    obs = Observation(**request.observation)
+    score = _safe(fn(obs))
+    return {"task_id": request.task_id, "score": score}
 
 
 @app.get("/{full_path:path}")
