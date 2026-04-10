@@ -90,39 +90,37 @@ def _score(final_state, initial_value=1000.0, trajectory=None, task_key="task2")
         return 0.05
 
 
-def grade_task1(final_state, initial_value=1000.0, trajectory=None):
+def _grade_task(final_state, initial_value=1000.0, trajectory=None, task_key="task2"):
     try:
-        return _safe_score(_score(final_state, initial_value, trajectory, "task1"))
+        return _safe_score(_score(final_state, initial_value, trajectory, task_key))
     except Exception:
         return 0.05
 
 
-def grade_task2(final_state, initial_value=1000.0, trajectory=None):
-    try:
-        return _safe_score(_score(final_state, initial_value, trajectory, "task2"))
-    except Exception:
-        return 0.05
+def grade_task1(observation):
+    return _grade_task(observation, 1000.0, None, "task1")
 
 
-def grade_task3(final_state, initial_value=1000.0, trajectory=None):
-    try:
-        return _safe_score(_score(final_state, initial_value, trajectory, "task3"))
-    except Exception:
-        return 0.05
+def grade_task2(observation):
+    return _grade_task(observation, 1000.0, None, "task2")
+
+
+def grade_task3(observation):
+    return _grade_task(observation, 1000.0, None, "task3")
 
 
 def run_all_tasks(final_state, initial_value=1000.0, trajectory=None):
-    s1 = grade_task1(final_state, initial_value, trajectory)
-    s2 = grade_task2(final_state, initial_value, trajectory)
-    s3 = grade_task3(final_state, initial_value, trajectory)
+    s1 = _grade_task(final_state, initial_value, trajectory, "task1")
+    s2 = _grade_task(final_state, initial_value, trajectory, "task2")
+    s3 = _grade_task(final_state, initial_value, trajectory, "task3")
     overall = _safe_score((s1 + s2 + s3) / 3.0)
     return {
+        "capital_preservation": s1,
+        "balanced_growth": s2,
+        "aggressive_optimization": s3,
         "task1": s1,
         "task2": s2,
         "task3": s3,
-        "task1_capital_preservation": s1,
-        "task2_balanced_growth": s2,
-        "task3_aggressive_optimization": s3,
         "overall_score": overall,
     }
 
@@ -131,4 +129,7 @@ TASKS = {
     "task1": grade_task1,
     "task2": grade_task2,
     "task3": grade_task3,
+    "capital_preservation": grade_task1,
+    "balanced_growth": grade_task2,
+    "aggressive_optimization": grade_task3,
 }
