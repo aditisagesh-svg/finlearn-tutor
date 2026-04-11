@@ -145,8 +145,12 @@ def list_tasks():
 class GraderRequest(BaseModel):
     task_id: str
     final_state: Optional[Dict[str, Any]] = None
+    observation: Optional[Dict[str, Any]] = None
     initial_value: Optional[float] = 1000.0
     trajectory: Optional[Dict[str, Any]] = None
+
+    def state_payload(self) -> Dict[str, Any]:
+        return self.final_state or self.observation or {}
 
 
 @app.post("/grader")
@@ -158,7 +162,7 @@ def run_grader(request: GraderRequest):
     try:
         initial_value = request.initial_value if request.initial_value is not None else 1000.0
         raw = TASK_REGISTRY[task_id]["fn"](
-            final_state=request.final_state or {},
+            final_state=request.state_payload(),
             initial_value=initial_value,
             trajectory=request.trajectory or {},
         )
@@ -178,7 +182,7 @@ def grade_all(request: GraderRequest):
     try:
         initial_value = request.initial_value if request.initial_value is not None else 1000.0
         result = run_all_tasks(
-            final_state=request.final_state or {},
+            final_state=request.state_payload(),
             initial_value=initial_value,
             trajectory=request.trajectory or {},
         )
