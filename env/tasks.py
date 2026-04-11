@@ -189,9 +189,9 @@ def run_all_tasks(
     initial_value: float = 1000.0,
     trajectory: Optional[Dict] = None,
 ) -> Dict:
-    s1 = _grade_task(final_state, initial_value, trajectory, "task1")
-    s2 = _grade_task(final_state, initial_value, trajectory, "task2")
-    s3 = _grade_task(final_state, initial_value, trajectory, "task3")
+    s1 = grade_task1(final_state, initial_value, trajectory)
+    s2 = grade_task2(final_state, initial_value, trajectory)
+    s3 = grade_task3(final_state, initial_value, trajectory)
     overall = _safe((s1 + s2 + s3) / 3.0)
     return {
         "capital_preservation": s1,

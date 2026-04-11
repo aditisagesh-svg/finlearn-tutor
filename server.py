@@ -1,26 +1,22 @@
 """
-Minimal HTTP server for Hugging Face Space validator compatibility.
+Compatibility wrapper that re-exports the canonical FastAPI app.
+
+Keep all HTTP logic in ``server/app.py`` so the deployment has one source of
+truth. This file only exists for older entrypoints that still import
+``server.py`` directly.
 """
 
-from fastapi import FastAPI
-
-from env.environment import FinLearnEnv
-
-app = FastAPI(title="FinLearn Tutor API")
-env = FinLearnEnv()
+from server.app import app
 
 
-@app.get("/")
-def healthcheck() -> dict:
-    return {"status": "ok", "service": "finlearn-tutor"}
+def main() -> None:
+    import os
+
+    import uvicorn
+
+    port = int(os.getenv("PORT", "7860"))
+    uvicorn.run("server.app:app", host="0.0.0.0", port=port)
 
 
-@app.post("/reset")
-def reset() -> dict:
-    global env
-    env = FinLearnEnv(max_steps=env.max_steps, seed=env.seed)
-    observation = env.state()
-    return {
-        "observation": observation.model_dump(),
-        "done": False,
-    }
+if __name__ == "__main__":
+    main()
