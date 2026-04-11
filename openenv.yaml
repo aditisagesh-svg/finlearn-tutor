@@ -54,7 +54,7 @@ action_space:
 
 reward:
   type: shaped
-  range: [0.0, 1.0]
+  range: [0.01, 0.99]
   components:
     portfolio_growth: positive
     diversification_bonus: positive
