@@ -189,3 +189,13 @@ def grade_all(request: GraderRequest):
         return {k: _safe_score(v) if isinstance(v, (int, float)) else v for k, v in result.items()}
     except Exception:
         return {"task1": 0.05, "task2": 0.05, "task3": 0.05, "overall_score": 0.05}
+
+
+def main() -> None:
+    import uvicorn
+
+    uvicorn.run("server.app:app", host="0.0.0.0", port=7860, reload=False)
+
+
+if __name__ == "__main__":
+    main()
