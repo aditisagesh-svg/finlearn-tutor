@@ -62,15 +62,21 @@ reward:
     overtrading_penalty: negative
 
 tasks:
-  - name: task1
+  - id: task1
+    name: Capital Preservation
     difficulty: easy
-    description: Capital Preservation - minimize drawdown and protect capital
-  - name: task2
+    grader: env.tasks:grade_task1
+    score_range: [0.01, 0.99]
+  - id: task2
+    name: Balanced Growth
     difficulty: medium
-    description: Balanced Growth - stable returns with diversification
-  - name: task3
+    grader: env.tasks:grade_task2
+    score_range: [0.01, 0.99]
+  - id: task3
+    name: Aggressive Optimization
     difficulty: hard
-    description: Aggressive Optimization - maximize returns with risk control
+    grader: env.tasks:grade_task3
+    score_range: [0.01, 0.99]
 
 inference:
   script: inference.py
