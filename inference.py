@@ -167,9 +167,12 @@ def run_simulation(max_steps: int = 30, seed: int = 42) -> Dict[str, Any]:
     success = False
     score = 0.0
     try:
-        client = build_openai_client()
-        # Unconditional proxy probe for validator compliance.
-        ping_llm_proxy(client)
+        # Proxy setup should never abort the deterministic rollout.
+        try:
+            client = build_openai_client()
+            ping_llm_proxy(client)
+        except Exception:
+            pass
 
         env = FinLearnEnv(max_steps=max_steps, seed=seed)
         observation = env.reset()
