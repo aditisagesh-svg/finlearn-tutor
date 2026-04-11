@@ -1,7 +1,6 @@
 """
 Deterministic baseline inference script for FinLearn Tutor.
-
-This file is intentionally strict about stdout formatting for validator compatibility.
+Strict stdout formatting for validator compatibility.
 """
 
 from __future__ import annotations
@@ -16,8 +15,9 @@ from env.environment import FinLearnEnv
 from env.models import Action
 from env.tasks import run_all_tasks
 
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
-LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 STOCK_BUY = {"ALPHA": 1, "BETA": 2, "GAMMA": 3}
 STOCK_SELL = {"ALPHA": 4, "BETA": 5, "GAMMA": 6}
@@ -40,41 +40,21 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     )
 
 
-def log_end(
-    success: bool,
-    steps: int,
-    score: float,
-    rewards: List[float],
-    task_scores: Dict[str, float],
-) -> None:
-    rewards_str = ",".join(f"{reward:.2f}" for reward in rewards)
-    task_scores_str = " ".join(
-        f"{task}={max(0.01, min(float(task_score), 0.99)):.3f}"
-        for task, task_score in task_scores.items()
-        if task in {"capital_preservation", "balanced_growth", "aggressive_optimization"}
-    )
+def log_end(success: bool, steps: int, rewards: List[float]) -> None:
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} {task_scores_str} rewards={rewards_str}",
+        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
         flush=True,
     )
 
 
 def build_openai_client() -> OpenAI:
-    api_base_url = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
-    api_key = os.getenv("API_KEY")
-    if not api_key:
-        raise ValueError("API_KEY environment variable is required")
-    return OpenAI(base_url=api_base_url, api_key=api_key)
-
-
-def _log_proxy_event(message: str) -> None:
-    print(message, file=sys.stderr, flush=True)
+    if not HF_TOKEN:
+        raise RuntimeError("HF_TOKEN is required")
+    return OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
 
 def ping_llm_proxy(client: OpenAI) -> None:
-    """
-    Make a minimal routed request so validator logs confirm proxy usage.
-    """
     try:
         client.chat.completions.create(
             model=MODEL_NAME,
@@ -82,15 +62,11 @@ def ping_llm_proxy(client: OpenAI) -> None:
             max_tokens=1,
             temperature=0,
         )
-        _log_proxy_event("[PROXY] ping ok")
     except Exception as exc:
-        _log_proxy_event(f"[PROXY] ping failed: {type(exc).__name__}: {exc}")
+        print(f"[PROXY] ping failed: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
 
 
 def choose_action(state: Dict[str, Any]) -> Action:
-    """
-    Deterministic benchmark baseline policy for reproducible evaluation runs.
-    """
     trends = state["trends"]
     volatility = state["volatility"]
     holdings = state["holdings"]
@@ -150,22 +126,24 @@ def choose_action(state: Dict[str, Any]) -> Action:
     return Action(action_id=0)
 
 
-def run_simulation(max_steps: int | None = None, seed: int | None = None) -> Dict[str, Any]:
+def run_simulation(max_steps: int = 30, seed: int = 42) -> Dict[str, Any]:
     task_name = os.getenv("TASK_NAME", "finlearn-tutor")
     benchmark = os.getenv("BENCHMARK", "finlearn")
     model = MODEL_NAME
+    max_steps = int(os.getenv("MAX_STEPS", str(max_steps)))
+    seed = int(os.getenv("SEED", str(seed)))
     success_score_threshold = float(os.getenv("SUCCESS_SCORE_THRESHOLD", "0.5"))
-    max_steps = int(os.getenv("MAX_STEPS", "30")) if max_steps is None else max_steps
-    seed = int(os.getenv("SEED", "42")) if seed is None else seed
+
     log_start(task=task_name, env=benchmark, model=model)
 
     rewards: List[float] = []
     steps_taken = 0
     success = False
     score = 0.0
+    task_scores: Dict[str, float] = {}
+
     try:
         client = build_openai_client()
-        # Unconditional proxy probe for validator compliance.
         ping_llm_proxy(client)
 
         env = FinLearnEnv(max_steps=max_steps, seed=seed)
@@ -207,14 +185,9 @@ def run_simulation(max_steps: int | None = None, seed: int | None = None) -> Dic
             "score": score,
             "success": success,
         }
+
     finally:
-        log_end(
-            success=success,
-            steps=steps_taken,
-            score=score,
-            rewards=rewards,
-            task_scores=task_scores,
-        )
+        log_end(success=success, steps=steps_taken, rewards=rewards)
 
 
 if __name__ == "__main__":

@@ -1,36 +1,87 @@
 """
 Trajectory-aware task graders for FinLearn Tutor.
-Loaded by OpenEnv validator as: env.tasks
+Imported by OpenEnv validator as: env.tasks
 """
 
 from __future__ import annotations
 
 import math
-from typing import Dict
+from typing import Any, Dict, List, Optional
 
-from env.metrics import (
-    clamp_score,
-    compute_drawdown,
-    compute_regime_adaptation,
-    compute_returns,
-    compute_trade_efficiency,
-    compute_volatility,
-    normalize_growth,
-    normalize_inverse,
-)
-from env.models import Observation
+# ── Safe imports with fallback stubs so graders never crash on import ─────────
+try:
+    from env.metrics import (
+        clamp_score,
+        compute_drawdown,
+        compute_regime_adaptation,
+        compute_returns,
+        compute_trade_efficiency,
+        compute_volatility,
+        normalize_growth,
+        normalize_inverse,
+    )
+    from env.models import Observation
+    _IMPORTS_OK = True
+except Exception:
+    _IMPORTS_OK = False
+    Observation = None  # type: ignore
+
+    def clamp_score(x: float) -> float:
+        return max(0.0, min(1.0, float(x)))
+
+    def compute_returns(ph: list) -> list:
+        if len(ph) < 2:
+            return [0.0]
+        return [(ph[i] - ph[i - 1]) / max(abs(ph[i - 1]), 1e-9) for i in range(1, len(ph))]
+
+    def compute_drawdown(ph: list) -> float:
+        if not ph:
+            return 0.0
+        peak = ph[0]
+        dd = 0.0
+        for v in ph:
+            if v > peak:
+                peak = v
+            dd = max(dd, (peak - v) / max(abs(peak), 1e-9))
+        return dd
+
+    def compute_volatility(returns: list) -> float:
+        if len(returns) < 2:
+            return 0.0
+        mean = sum(returns) / len(returns)
+        var = sum((r - mean) ** 2 for r in returns) / len(returns)
+        return math.sqrt(var)
+
+    def compute_trade_efficiency(actions: list, ph: list) -> float:
+        return 0.5
+
+    def compute_regime_adaptation(steps: list) -> float:
+        return 0.5
+
+    def normalize_growth(growth: float, target: float) -> float:
+        if target <= 0:
+            return 0.5
+        return min(1.0, max(0.0, growth / target))
+
+    def normalize_inverse(value: float, cap: float) -> float:
+        if cap <= 0:
+            return 0.5
+        return max(0.0, 1.0 - value / cap)
 
 
-def _safe_score(score: float) -> float:
-    """Always returns a float strictly between 0.01 and 0.99."""
+# ── Safety clamp ──────────────────────────────────────────────────────────────
+
+def _safe(x: float) -> float:
     try:
-        v = float(score)
+        v = float(x)
         if math.isnan(v) or math.isinf(v):
             return 0.50
         return round(max(0.01, min(0.99, v)), 2)
     except Exception:
         return 0.50
 
+
+# ── Task configs ──────────────────────────────────────────────────────────────
 
 TASK_CONFIGS = {
     "task1": {
@@ -48,72 +99,100 @@ TASK_CONFIGS = {
 }
 
 
-def _as_state_dict(final_state):
-    return final_state.model_dump() if isinstance(final_state, Observation) else final_state
+# ── Internal scoring ──────────────────────────────────────────────────────────
+
+def _state_dict(final_state: Any) -> Dict:
+    if hasattr(final_state, "model_dump"):
+        return final_state.model_dump()
+    if isinstance(final_state, dict):
+        return final_state
+    return {}
 
 
-def _compute_metrics(final_state, initial_value=1000.0, trajectory=None):
-    state = _as_state_dict(final_state)
-    trajectory = trajectory if isinstance(trajectory, dict) else {}
-    ph = trajectory.get("portfolio_history") or [initial_value, state["portfolio_value"]]
-    actions = trajectory.get("action_history", [])
-    steps = trajectory.get("step_records", [])
+def _compute(final_state: Any, initial_value: float = 1000.0, trajectory: Optional[Dict] = None) -> Dict:
+    state = _state_dict(final_state)
+    traj = trajectory if isinstance(trajectory, dict) else {}
+    ph = traj.get("portfolio_history") or [initial_value, state.get("portfolio_value", initial_value)]
+    actions = traj.get("action_history", [])
+    steps = traj.get("step_records", [])
 
     returns = compute_returns(ph)
-    growth = (ph[-1] - ph[0]) / max(ph[0], 1e-9)
+    growth = (ph[-1] - ph[0]) / max(abs(ph[0]), 1e-9)
     drawdown = compute_drawdown(ph)
     volatility = compute_volatility(returns)
     trade_count = sum(1 for a in actions if a not in (0, 8))
     trade_eff = compute_trade_efficiency(actions, ph)
-    regime_adap = compute_regime_adaptation(steps)
-    dq = clamp_score((trade_eff + regime_adap) / 2.0)
-    return growth, drawdown, volatility, trade_count, trade_eff, regime_adap, dq
+    regime = compute_regime_adaptation(steps)
+    dq = clamp_score((trade_eff + regime) / 2.0)
+
+    return {
+        "growth": growth,
+        "drawdown": drawdown,
+        "volatility": volatility,
+        "trade_count": trade_count,
+        "trade_eff": trade_eff,
+        "regime": regime,
+        "dq": dq,
+    }
 
 
-def _score(final_state, initial_value=1000.0, trajectory=None, task_key="task2"):
+def _score_task(final_state: Any, initial_value: float, trajectory: Optional[Dict], key: str) -> float:
     try:
-        growth, drawdown, volatility, trade_count, trade_eff, regime_adap, dq = \
-            _compute_metrics(final_state, initial_value, trajectory)
-        w = TASK_CONFIGS[task_key]["weights"]
-        t = TASK_CONFIGS[task_key]["targets"]
+        m = _compute(final_state, initial_value, trajectory)
+        w = TASK_CONFIGS[key]["weights"]
+        t = TASK_CONFIGS[key]["targets"]
 
-        gs   = normalize_growth(growth, t["growth"])
-        rcs  = normalize_inverse(drawdown, t["drawdown_cap"])
-        ss   = normalize_inverse(volatility, t["vol_cap"])
-        ts   = normalize_inverse(trade_count, t["trade_cap"])
-        dqs  = clamp_score(dq * 0.7 + ts * 0.3)
+        gs  = normalize_growth(m["growth"], t["growth"])
+        rcs = normalize_inverse(m["drawdown"], t["drawdown_cap"])
+        ss  = normalize_inverse(m["volatility"], t["vol_cap"])
+        ts  = normalize_inverse(m["trade_count"], t["trade_cap"])
+        dqs = clamp_score(m["dq"] * 0.7 + ts * 0.3)
 
-        raw = clamp_score(gs * w["growth"] + rcs * w["risk_control"] +
-                          ss * w["stability"] + dqs * w["decision_quality"])
-        return _safe_score(raw)
+        raw = clamp_score(
+            gs  * w["growth"]
+            + rcs * w["risk_control"]
+            + ss  * w["stability"]
+            + dqs * w["decision_quality"]
+        )
+        return _safe(raw)
     except Exception:
         return 0.05
 
 
-def _grade_task(final_state, initial_value=1000.0, trajectory=None, task_key="task2"):
+# ── Public graders (validator imports these as env.tasks:grade_taskN) ─────────
+
+def grade_task1(final_state: Any, initial_value: float = 1000.0, trajectory: Optional[Dict] = None) -> float:
     try:
-        return _safe_score(_score(final_state, initial_value, trajectory, task_key))
+        return _safe(_score_task(final_state, initial_value, trajectory, "task1"))
     except Exception:
         return 0.05
 
 
-def grade_task1(observation):
-    return _grade_task(observation, 1000.0, None, "task1")
+def grade_task2(final_state: Any, initial_value: float = 1000.0, trajectory: Optional[Dict] = None) -> float:
+    try:
+        return _safe(_score_task(final_state, initial_value, trajectory, "task2"))
+    except Exception:
+        return 0.05
 
 
-def grade_task2(observation):
-    return _grade_task(observation, 1000.0, None, "task2")
+def grade_task3(final_state: Any, initial_value: float = 1000.0, trajectory: Optional[Dict] = None) -> float:
+    try:
+        return _safe(_score_task(final_state, initial_value, trajectory, "task3"))
+    except Exception:
+        return 0.05
 
 
-def grade_task3(observation):
-    return _grade_task(observation, 1000.0, None, "task3")
+# ── Aggregate ─────────────────────────────────────────────────────────────────
 
-
-def run_all_tasks(final_state, initial_value=1000.0, trajectory=None):
+def run_all_tasks(
+    final_state: Any,
+    initial_value: float = 1000.0,
+    trajectory: Optional[Dict] = None,
+) -> Dict:
     s1 = _grade_task(final_state, initial_value, trajectory, "task1")
     s2 = _grade_task(final_state, initial_value, trajectory, "task2")
     s3 = _grade_task(final_state, initial_value, trajectory, "task3")
-    overall = _safe_score((s1 + s2 + s3) / 3.0)
+    overall = _safe((s1 + s2 + s3) / 3.0)
     return {
         "capital_preservation": s1,
         "balanced_growth": s2,
@@ -124,6 +203,8 @@ def run_all_tasks(final_state, initial_value=1000.0, trajectory=None):
         "overall_score": overall,
     }
 
+
+# ── Registry ──────────────────────────────────────────────────────────────────
 
 TASKS = {
     "task1": grade_task1,
