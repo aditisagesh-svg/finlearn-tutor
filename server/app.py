@@ -277,3 +277,16 @@ def api_simulation(max_steps: int = 20, seed: int = 42) -> dict:
             "concentration_score": observation.concentration_score,
         },
     }
+
+
+def main() -> None:
+    import os
+
+    import uvicorn
+
+    port = int(os.getenv("PORT", "7860"))
+    uvicorn.run("server.app:app", host="0.0.0.0", port=port)
+
+
+if __name__ == "__main__":
+    main()
