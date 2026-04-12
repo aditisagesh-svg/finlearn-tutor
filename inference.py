@@ -60,10 +60,10 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     )
 
 
-def log_end(success: bool, steps: int, rewards: List[float]) -> None:
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{reward:.2f}" for reward in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
+        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}",
         flush=True,
     )
 
@@ -166,6 +166,7 @@ def run_simulation(max_steps: int = 30, seed: int = 42) -> Dict[str, Any]:
     steps_taken = 0
     success = False
     score = 0.0
+    task_scores: Dict[str, float] = {}
     try:
         # Proxy setup should never abort the deterministic rollout.
         try:
@@ -214,7 +215,7 @@ def run_simulation(max_steps: int = 30, seed: int = 42) -> Dict[str, Any]:
             "success": success,
         }
     finally:
-        log_end(success=success, steps=steps_taken, rewards=rewards)
+        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
 
 if __name__ == "__main__":
