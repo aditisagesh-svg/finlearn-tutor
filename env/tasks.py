@@ -378,3 +378,24 @@ TASKS = {
     "task2": grade_task2,
     "task3": grade_task3,
 }
+
+TASK_REGISTRY = {
+    "task1": {
+        "name": "Capital Preservation",
+        "description": "Minimize drawdown and protect capital over 30 steps.",
+        "difficulty": "easy",
+        "grader": grade_task1,
+    },
+    "task2": {
+        "name": "Balanced Growth",
+        "description": "Achieve stable returns while maintaining diversification.",
+        "difficulty": "medium",
+        "grader": grade_task2,
+    },
+    "task3": {
+        "name": "Aggressive Optimization",
+        "description": "Maximize returns while controlling volatility.",
+        "difficulty": "hard",
+        "grader": grade_task3,
+    },
+}

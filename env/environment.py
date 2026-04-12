@@ -368,3 +368,6 @@ def _build_action_feedback(
         if market_event == "none"
         else f"{verb} during {market_event} {trade_note} and {outcome} next-step portfolio value."
     )
+
+
+FinLearnEnvironment = FinLearnEnv
