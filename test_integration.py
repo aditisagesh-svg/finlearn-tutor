@@ -55,6 +55,16 @@ class IntegrationTests(unittest.TestCase):
             response = self.client.post("/run", json={"task_id": "task1", "action": action})
             self.assertEqual(response.status_code, 200)
 
+    def test_dashboard_simulation_endpoint(self) -> None:
+        response = self.client.get("/api/simulation?max_steps=3&seed=42")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("initial_value", payload)
+        self.assertIn("steps", payload)
+        self.assertIn("task_scores", payload)
+        self.assertIn("final_state", payload)
+        self.assertGreaterEqual(len(payload["steps"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

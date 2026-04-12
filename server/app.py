@@ -1,6 +1,6 @@
 """
 OpenEnv-compliant FastAPI server for FinLearn Tutor.
-Exposes: /health, /tasks, /reset, /run
+Exposes: /health, /tasks, /reset, /run, /grade, /api/simulation
 """
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ from pydantic import BaseModel
 
 from env.environment import FinLearnEnv
 from env.models import Action
-from env.tasks import TASK_REGISTRY
+from env.tasks import TASK_REGISTRY, run_all_tasks
 
-app = FastAPI(title="FinLearn Tutor API")
+app = FastAPI(title="FinLearn Tutor API", version="1.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -167,3 +167,113 @@ def grade(req: ResetRequest) -> dict:
     grader = TASK_REGISTRY[req.task_id]["grader"]
     score = max(0.0, min(1.0, float(grader(observation, trajectory=trajectory))))
     return {"task_id": req.task_id, "score": round(score, 4)}
+
+
+def _choose_dashboard_action(state: dict) -> int:
+    trends = state["trends"]
+    volatility = state["volatility"]
+    holdings = state["holdings"]
+    prices = state["prices"]
+    cash = state["cash_balance"]
+    market_regime = state.get("market_regime", "sideways")
+    risk_level = state.get("risk_level", "moderate")
+    market_event = state.get("market_event", "none")
+
+    stock_values = {symbol: holdings[symbol] * prices[symbol] for symbol in holdings}
+    portfolio_value = state["portfolio_value"]
+
+    if risk_level == "high" or market_event == "market_crash":
+        for symbol, trend in trends.items():
+            if trend < 0 and holdings.get(symbol, 0) > 0:
+                return {"ALPHA": 4, "BETA": 5, "GAMMA": 6}[symbol]
+        return 7 if sum(stock_values.values()) > 0 else 0
+
+    if portfolio_value > 0 and sum(stock_values.values()) > 0:
+        for symbol, value in stock_values.items():
+            if value / portfolio_value > 0.70:
+                return 7
+
+    for symbol in ["ALPHA", "GAMMA", "BETA"]:
+        trend = trends[symbol]
+        vol = volatility[symbol]
+        if trend > 0.002 and vol <= 0.035 and cash > 50:
+            weight = stock_values.get(symbol, 0) / portfolio_value if portfolio_value > 0 else 0
+            if weight < 0.50:
+                return {"ALPHA": 1, "BETA": 2, "GAMMA": 3}[symbol]
+
+    if market_regime == "bear":
+        for symbol in ["ALPHA", "GAMMA", "BETA"]:
+            if trends[symbol] < 0 and holdings.get(symbol, 0) > 0:
+                return {"ALPHA": 4, "BETA": 5, "GAMMA": 6}[symbol]
+        return 0
+
+    for symbol, trend in trends.items():
+        if trend < -0.002 and holdings.get(symbol, 0) > 0:
+            return {"ALPHA": 4, "BETA": 5, "GAMMA": 6}[symbol]
+
+    best_buy = None
+    best_score = float("-inf")
+    for symbol, trend in trends.items():
+        vol = volatility[symbol]
+        if vol > 0.035:
+            continue
+        if trend > 0.002:
+            score = trend - vol
+            if score > best_score:
+                best_score = score
+                best_buy = symbol
+
+    if best_buy and cash > 50:
+        return {"ALPHA": 1, "BETA": 2, "GAMMA": 3}[best_buy]
+
+    return 0
+
+
+@app.get("/api/simulation")
+def api_simulation(max_steps: int = 20, seed: int = 42) -> dict:
+    env = FinLearnEnv(max_steps=max_steps, seed=seed)
+    observation = env.reset()
+    initial_value = observation.portfolio_value
+
+    steps: list[dict] = []
+    done = False
+    while not done:
+        action_id = _choose_dashboard_action(observation.model_dump())
+        observation, reward, done, info = env.step(Action(action_id=action_id))
+        steps.append(
+            {
+                "step": observation.step,
+                "action": Action(action_id=action_id).name,
+                "reward": reward.value,
+                "portfolio_value": observation.portfolio_value,
+                "cash_balance": observation.cash_balance,
+                "holdings": observation.holdings,
+                "prices": observation.prices,
+                "volatility": observation.volatility,
+                "learning_score": observation.learning_score,
+                "reasoning": info.get("reasoning", ""),
+                "concept": info.get("insight", ""),
+                "suggestion": info.get("suggestion", ""),
+                "market_regime": observation.market_regime,
+                "max_drawdown": observation.max_drawdown,
+                "concentration_score": observation.concentration_score,
+                "portfolio_volatility": observation.portfolio_volatility,
+            }
+        )
+
+    task_scores = run_all_tasks(
+        final_state=observation,
+        initial_value=initial_value,
+        trajectory=env.get_episode_summary(),
+    )
+
+    return {
+        "initial_value": initial_value,
+        "steps": steps,
+        "task_scores": task_scores,
+        "final_state": {
+            "market_regime": observation.market_regime,
+            "max_drawdown": observation.max_drawdown,
+            "concentration_score": observation.concentration_score,
+        },
+    }
