@@ -31,9 +31,30 @@ CONCENTRATION_LIMIT  = 0.70
 
 # Task definitions — each runs as its own episode
 TASKS = [
-    {"id": "task1", "name": "Capital Preservation", "env": "finlearn", "grader": Task1Grader, "seed": 42},
-    {"id": "task2", "name": "Balanced Growth", "env": "finlearn", "grader": Task2Grader, "seed": 43},
-    {"id": "task3", "name": "Aggressive Optimization", "env": "finlearn", "grader": Task3Grader, "seed": 44},
+    {
+        "id": "task1",
+        "display_name": "easy",
+        "name": "Capital Preservation",
+        "env": "finlearn",
+        "grader": Task1Grader,
+        "seed": 42,
+    },
+    {
+        "id": "task2",
+        "display_name": "medium",
+        "name": "Balanced Growth",
+        "env": "finlearn",
+        "grader": Task2Grader,
+        "seed": 43,
+    },
+    {
+        "id": "task3",
+        "display_name": "hard",
+        "name": "Aggressive Optimization",
+        "env": "finlearn",
+        "grader": Task3Grader,
+        "seed": 44,
+    },
 ]
 
 
@@ -57,6 +78,16 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> No
         f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}",
         flush=True,
     )
+
+
+def log_avg_score(task_label: str, score: float) -> None:
+    print(f"      → Avg score '{task_label}': {score:.4f}", flush=True)
+
+
+def log_final_scores(results: List[Dict[str, Any]]) -> None:
+    print("\n===== FINAL SCORES =====", flush=True)
+    for result in results:
+        print(f"  {result['display_name']}: {result['score']:.4f}", flush=True)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -168,6 +199,7 @@ def run_task_episode(
     Returns result dict with score.
     """
     task_name = task_meta["name"]
+    display_name = task_meta.get("display_name", task_meta["id"])
     env_name  = task_meta["env"]
     grader_cls = task_meta["grader"]
     grader_obj = grader_cls() if isinstance(grader_cls, type) else grader_cls
@@ -177,7 +209,7 @@ def run_task_episode(
     success     = False
     score       = 0.01
 
-    log_start(task=task_name, env=env_name, model=MODEL_NAME)
+    log_start(task=display_name, env=env_name, model=MODEL_NAME)
 
     try:
         episode_seed = int(task_meta.get("seed", seed))
@@ -222,9 +254,11 @@ def run_task_episode(
 
     finally:
         log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+        log_avg_score(display_name, score)
 
     return {
         "task_id":    task_meta["id"],
+        "display_name": display_name,
         "task_name":  task_name,
         "score":      score,
         "success":    success,
@@ -265,6 +299,7 @@ def run_simulation(max_steps: int = 30, seed: int = 42) -> Dict[str, Any]:
         results.append(result)
 
     overall = _clamp(sum(r["score"] for r in results) / len(results))
+    log_final_scores(results)
 
     return {
         "tasks":         results,
