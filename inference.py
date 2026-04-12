@@ -15,7 +15,7 @@ from openai import OpenAI
 
 from env.environment import FinLearnEnv
 from env.models import Action
-from env.tasks import grade_task1, grade_task2, grade_task3
+from env.tasks import Task1Grader, Task2Grader, Task3Grader
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME   = os.getenv("MODEL_NAME", "gpt-4.1-mini")
@@ -31,9 +31,9 @@ CONCENTRATION_LIMIT  = 0.70
 
 # Task definitions — each runs as its own episode
 TASKS = [
-    {"id": "task1", "name": "Capital Preservation", "env": "finlearn", "grader": grade_task1, "seed": 42},
-    {"id": "task2", "name": "Balanced Growth", "env": "finlearn", "grader": grade_task2, "seed": 43},
-    {"id": "task3", "name": "Aggressive Optimization", "env": "finlearn", "grader": grade_task3, "seed": 44},
+    {"id": "task1", "name": "Capital Preservation", "env": "finlearn", "grader": Task1Grader, "seed": 42},
+    {"id": "task2", "name": "Balanced Growth", "env": "finlearn", "grader": Task2Grader, "seed": 43},
+    {"id": "task3", "name": "Aggressive Optimization", "env": "finlearn", "grader": Task3Grader, "seed": 44},
 ]
 
 
@@ -169,7 +169,8 @@ def run_task_episode(
     """
     task_name = task_meta["name"]
     env_name  = task_meta["env"]
-    grader    = task_meta["grader"]
+    grader_cls = task_meta["grader"]
+    grader_obj = grader_cls() if isinstance(grader_cls, type) else grader_cls
 
     rewards: List[float] = []
     steps_taken = 0
@@ -204,11 +205,18 @@ def run_task_episode(
             )
 
         # Grade using this task's specific grader
-        raw_score = grader(
-            final_state=observation,
-            initial_value=initial_val,
-            trajectory=env.get_episode_summary(),
-        )
+        if hasattr(grader_obj, "grade"):
+            raw_score = grader_obj.grade(
+                observation,
+                initial_value=initial_val,
+                trajectory=env.get_episode_summary(),
+            )
+        else:
+            raw_score = grader_obj(
+                final_state=observation,
+                initial_value=initial_val,
+                trajectory=env.get_episode_summary(),
+            )
         score   = _clamp(raw_score)
         success = score >= success_threshold
 

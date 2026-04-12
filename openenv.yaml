@@ -65,7 +65,7 @@ tasks:
   - id: task1
     name: Capital Preservation
     difficulty: easy
-    grader: env.tasks:grade_task1
+    grader: env.tasks:Task1Grader
     score_range: [0.0, 1.0]
     config:
       seed: 42
@@ -74,7 +74,7 @@ tasks:
   - id: task2
     name: Balanced Growth
     difficulty: medium
-    grader: env.tasks:grade_task2
+    grader: env.tasks:Task2Grader
     score_range: [0.0, 1.0]
     config:
       seed: 43
@@ -83,7 +83,7 @@ tasks:
   - id: task3
     name: Aggressive Optimization
     difficulty: hard
-    grader: env.tasks:grade_task3
+    grader: env.tasks:Task3Grader
     score_range: [0.0, 1.0]
     config:
       seed: 44

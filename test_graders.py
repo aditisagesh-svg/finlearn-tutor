@@ -1,6 +1,6 @@
 import unittest
 
-from env.tasks import grade_task1, grade_task2, grade_task3
+from env.tasks import Task1Grader, Task2Grader, Task3Grader
 
 
 def make_state(portfolio_value: float = 1200.0):
@@ -21,21 +21,24 @@ def make_positive_trajectory():
 
 
 class GraderTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.graders = (Task1Grader(), Task2Grader(), Task3Grader())
+
     def test_all_zero_returns_valid_score(self) -> None:
-        for grader in (grade_task1, grade_task2, grade_task3):
-            score = grader(make_state(portfolio_value=0.0), trajectory={"portfolio_history": [1000.0, 0.0]})
+        for grader in self.graders:
+            score = grader.grade(make_state(portfolio_value=0.0), trajectory={"portfolio_history": [1000.0, 0.0]})
             self.assertGreaterEqual(score, 0.0)
             self.assertLessEqual(score, 1.0)
 
     def test_perfect_metrics_returns_near_one(self) -> None:
-        for grader in (grade_task1, grade_task2, grade_task3):
-            score = grader(make_state(), trajectory=make_positive_trajectory())
+        for grader in self.graders:
+            score = grader.grade(make_state(), trajectory=make_positive_trajectory())
             self.assertGreaterEqual(score, 0.8)
             self.assertLessEqual(score, 1.0)
 
     def test_bankrupt_portfolio(self) -> None:
-        for grader in (grade_task1, grade_task2, grade_task3):
-            score = grader(make_state(portfolio_value=-1.0), trajectory={"portfolio_history": [1000.0, -1.0]})
+        for grader in self.graders:
+            score = grader.grade(make_state(portfolio_value=-1.0), trajectory={"portfolio_history": [1000.0, -1.0]})
             self.assertGreaterEqual(score, 0.0)
             self.assertLessEqual(score, 1.0)
 

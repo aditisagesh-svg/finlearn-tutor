@@ -128,9 +128,9 @@ The project includes three deterministic trajectory-aware tasks with graders tha
 
 | Task ID | Difficulty | Objective | Grader |
 |---|---|---|---|
-| `task1` | Easy | Capital Preservation | `grade_task1` |
-| `task2` | Medium | Balanced Growth | `grade_task2` |
-| `task3` | Hard | Aggressive Optimization | `grade_task3` |
+| `task1` | Easy | Capital Preservation | `Task1Grader` |
+| `task2` | Medium | Balanced Growth | `Task2Grader` |
+| `task3` | Hard | Aggressive Optimization | `Task3Grader` |
 
 Each task uses the same benchmark core but different weights across growth, risk control, stability, and decision quality.
 
@@ -276,13 +276,19 @@ That separation makes the project stronger: the environment is the benchmark, an
 
 ## API Check
 
-The deployed Hugging Face Space exposes a validator-compatible reset endpoint:
+The deployed Hugging Face Space exposes validator-compatible environment endpoints:
 
 ```bash
 curl -X POST https://aditisageshhh-finlearn-tutor.hf.space/reset \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
+
+You can also query:
+
+- `GET /health`
+- `GET /tasks`
+- `POST /run`
 
 ## Validation Checklist
 
@@ -296,6 +302,9 @@ openenv validate
 
 The current project is structured to satisfy:
 
+- Hugging Face Space `/health` availability
+- Hugging Face Space `/tasks` availability
+- Hugging Face Space `/run` step execution
 - Hugging Face Space `/reset` availability
 - Docker build validation
 - OpenEnv validation

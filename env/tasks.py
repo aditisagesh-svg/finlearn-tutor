@@ -295,17 +295,71 @@ def compute_task_score(
 
 # ── Public graders ────────────────────────────────────────────────────────────
 
+def _resolve_final_state(candidate: Any) -> Any:
+    """
+    Normalize grader input so both validator env objects and plain state dicts work.
+    """
+    try:
+        if hasattr(candidate, "get_state"):
+            return candidate.get_state()
+        if hasattr(candidate, "state"):
+            state = candidate.state()
+            if hasattr(state, "model_dump"):
+                return state.model_dump()
+            return state
+        if hasattr(candidate, "model_dump"):
+            return candidate.model_dump()
+        if isinstance(candidate, dict):
+            return candidate
+    except Exception:
+        pass
+    return {}
+
+
+def _grade_task(
+    task_key: str,
+    final_state: Any = None,
+    initial_value: float = 1000.0,
+    trajectory: Optional[Dict] = None,
+) -> float:
+    try:
+        bd = compute_task_score(task_key, _resolve_final_state(final_state), initial_value, trajectory)
+        return safe(bd["total_score"])
+    except Exception:
+        return _EPS * 5   # 0.05
+
+
+class Task1Grader:
+    def grade(self, env, *args, **kwargs) -> float:
+        final_state = kwargs.pop("final_state", env)
+        initial_value = kwargs.pop("initial_value", args[0] if args else 1000.0)
+        trajectory = kwargs.pop("trajectory", args[1] if len(args) > 1 else None)
+        return _grade_task("task1", _resolve_final_state(final_state), initial_value, trajectory)
+
+
+class Task2Grader:
+    def grade(self, env, *args, **kwargs) -> float:
+        final_state = kwargs.pop("final_state", env)
+        initial_value = kwargs.pop("initial_value", args[0] if args else 1000.0)
+        trajectory = kwargs.pop("trajectory", args[1] if len(args) > 1 else None)
+        return _grade_task("task2", _resolve_final_state(final_state), initial_value, trajectory)
+
+
+class Task3Grader:
+    def grade(self, env, *args, **kwargs) -> float:
+        final_state = kwargs.pop("final_state", env)
+        initial_value = kwargs.pop("initial_value", args[0] if args else 1000.0)
+        trajectory = kwargs.pop("trajectory", args[1] if len(args) > 1 else None)
+        return _grade_task("task3", _resolve_final_state(final_state), initial_value, trajectory)
+
+
 def grade_task1(
     final_state: Any = None,
     initial_value: float = 1000.0,
     trajectory: Optional[Dict] = None,
 ) -> float:
     """Capital Preservation. Returns float in (0.01, 0.99)."""
-    try:
-        bd = compute_task_score("task1", final_state or {}, initial_value, trajectory)
-        return safe(bd["total_score"])
-    except Exception:
-        return _EPS * 5   # 0.05
+    return _grade_task("task1", final_state, initial_value, trajectory)
 
 
 def grade_task2(
@@ -314,11 +368,7 @@ def grade_task2(
     trajectory: Optional[Dict] = None,
 ) -> float:
     """Balanced Growth. Returns float in (0.01, 0.99)."""
-    try:
-        bd = compute_task_score("task2", final_state or {}, initial_value, trajectory)
-        return safe(bd["total_score"])
-    except Exception:
-        return _EPS * 5
+    return _grade_task("task2", final_state, initial_value, trajectory)
 
 
 def grade_task3(
@@ -327,11 +377,7 @@ def grade_task3(
     trajectory: Optional[Dict] = None,
 ) -> float:
     """Aggressive Optimization. Returns float in (0.01, 0.99)."""
-    try:
-        bd = compute_task_score("task3", final_state or {}, initial_value, trajectory)
-        return safe(bd["total_score"])
-    except Exception:
-        return _EPS * 5
+    return _grade_task("task3", final_state, initial_value, trajectory)
 
 
 # ── Aggregate ─────────────────────────────────────────────────────────────────
@@ -377,6 +423,12 @@ TASKS = {
     "task1": grade_task1,
     "task2": grade_task2,
     "task3": grade_task3,
+}
+
+TASK_GRADER_CLASSES = {
+    "task1": Task1Grader,
+    "task2": Task2Grader,
+    "task3": Task3Grader,
 }
 
 TASK_REGISTRY = {
