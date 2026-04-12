@@ -14,6 +14,8 @@ FinLearn Tutor is an OpenEnv-compatible financial learning environment for evalu
 
 The environment is designed as a real-world financial learning simulation rather than a game. It supports profile-aware evaluation through deterministic investor profiles and exposes explainable feedback at each step.
 
+Deployment note: the Hugging Face Space and Docker image run the FastAPI backend in `server/app.py`. The Streamlit dashboard in `frontend/app.py` is a separate local prototype and is not the deployed entrypoint.
+
 ## Why This Benchmark Matters
 
 Most finance-themed agent demos reward one thing: the final portfolio value. Real decision systems are judged very differently. In practice, a strong financial agent must protect capital through drawdowns, adapt when market structure changes, avoid unnecessary churn, and justify its actions in a way that humans can inspect.
@@ -152,15 +154,16 @@ This provides intermediate learning signal instead of a purely terminal binary o
 
 ```text
 .
-├── app.py
 ├── Dockerfile
 ├── inference.py
 ├── openenv.yaml
 ├── pyproject.toml
 ├── requirements.txt
+├── server.py
 ├── uv.lock
 ├── README.md
 ├── frontend/
+│   ├── app.py
 │   ├── public/
 │   ├── src/
 │   └── README.md
@@ -180,16 +183,16 @@ This provides intermediate learning signal instead of a purely terminal binary o
 
 ## Frontend Placement
 
-If you export a React or Lovable dashboard, place it inside `frontend/` instead of the repository root.
+The repository includes two separate UI layers:
 
-- Put app code such as `src/`, `components/`, `hooks/`, `lib/`, `pages/`, `App.tsx`, `main.tsx`, and `index.css` inside `frontend/`
-- Put web assets such as `favicon.ico`, `robots.txt`, and `placeholder.svg` inside `frontend/public/` when the Vite app expects public assets
-- Keep the existing Python files in the repository root so the simulation and server remain separate from the frontend build toolchain
+- `frontend/src/` contains the React + TypeScript dashboard used for the production web UI
+- `frontend/app.py` is a Streamlit prototype dashboard for local experimentation
 
-This keeps the repo organized as:
+Keep the backend simulation and API code separate from both UI implementations:
 
-- Python simulation and API at the root
-- React frontend in `frontend/`
+- Put React app code such as `src/`, `components/`, `hooks/`, `lib/`, `pages/`, `App.tsx`, `main.tsx`, and `index.css` inside `frontend/`
+- Put Streamlit-only code in `frontend/app.py` if you want to keep using that prototype locally
+- Keep the Python backend entrypoint in `server/app.py` so Docker and Hugging Face deploy the same FastAPI app
 
 ## Setup
 
