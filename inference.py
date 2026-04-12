@@ -31,9 +31,9 @@ CONCENTRATION_LIMIT  = 0.70
 
 # Task definitions — each runs as its own episode
 TASKS = [
-    {"id": "task1", "name": "easy",   "env": "finlearn", "grader": grade_task1},
-    {"id": "task2", "name": "medium", "env": "finlearn", "grader": grade_task2},
-    {"id": "task3", "name": "hard",   "env": "finlearn", "grader": grade_task3},
+    {"id": "task1", "name": "Capital Preservation", "env": "finlearn", "grader": grade_task1, "seed": 42},
+    {"id": "task2", "name": "Balanced Growth", "env": "finlearn", "grader": grade_task2, "seed": 43},
+    {"id": "task3", "name": "Aggressive Optimization", "env": "finlearn", "grader": grade_task3, "seed": 44},
 ]
 
 
@@ -62,23 +62,26 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> No
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _clamp(x: Any) -> float:
-    """Clamp to (0.01, 0.99). Never returns 0.0 or 1.0."""
+    """Clamp to [0.0, 1.0]."""
     try:
         v = float(x)
         if math.isnan(v) or math.isinf(v):
             return 0.50
-        return round(max(0.01, min(0.99, v)), 2)
+        return round(max(0.0, min(1.0, v)), 2)
     except Exception:
         return 0.50
 
 
-def build_openai_client() -> OpenAI:
+def build_openai_client() -> Optional[OpenAI]:
     if not HF_TOKEN:
-        raise RuntimeError("HF_TOKEN is required")
+        print("[PROXY] no API key provided; continuing without LLM proxy", file=sys.stderr, flush=True)
+        return None
     return OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
 
-def ping_llm_proxy(client: OpenAI) -> None:
+def ping_llm_proxy(client: Optional[OpenAI]) -> None:
+    if client is None:
+        return
     try:
         client.chat.completions.create(
             model=MODEL_NAME,
@@ -154,7 +157,7 @@ def choose_action(state: Dict[str, Any]) -> Action:
 
 def run_task_episode(
     task_meta: Dict,
-    client: OpenAI,
+    client: Optional[OpenAI],
     max_steps: int = 30,
     seed: int = 42,
     success_threshold: float = 0.5,
@@ -176,7 +179,8 @@ def run_task_episode(
     log_start(task=task_name, env=env_name, model=MODEL_NAME)
 
     try:
-        env         = FinLearnEnv(max_steps=max_steps, seed=seed)
+        episode_seed = int(task_meta.get("seed", seed))
+        env         = FinLearnEnv(max_steps=max_steps, seed=episode_seed)
         observation = env.reset()
         initial_val = observation.portfolio_value
 
@@ -238,12 +242,8 @@ def run_simulation(max_steps: int = 30, seed: int = 42) -> Dict[str, Any]:
     threshold = float(os.getenv("SUCCESS_SCORE_THRESHOLD", "0.5"))
 
     # Single proxy ping before any episode starts
-    try:
-        client = build_openai_client()
-        ping_llm_proxy(client)
-    except Exception as exc:
-        print(f"[PROXY] client error: {exc}", file=sys.stderr, flush=True)
-        client = None
+    client = build_openai_client()
+    ping_llm_proxy(client)
 
     results = []
     for task_meta in TASKS:
@@ -251,7 +251,7 @@ def run_simulation(max_steps: int = 30, seed: int = 42) -> Dict[str, Any]:
             task_meta=task_meta,
             client=client,
             max_steps=max_steps,
-            seed=seed,
+            seed=int(task_meta.get("seed", seed)),
             success_threshold=threshold,
         )
         results.append(result)

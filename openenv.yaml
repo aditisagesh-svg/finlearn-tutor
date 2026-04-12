@@ -66,17 +66,32 @@ tasks:
     name: Capital Preservation
     difficulty: easy
     grader: env.tasks:grade_task1
-    score_range: [0.01, 0.99]
+    score_range: [0.0, 1.0]
+    config:
+      seed: 42
+      profile: conservative
+      goal: capital_preservation
   - id: task2
     name: Balanced Growth
     difficulty: medium
     grader: env.tasks:grade_task2
-    score_range: [0.01, 0.99]
+    score_range: [0.0, 1.0]
+    config:
+      seed: 43
+      profile: balanced
+      goal: balanced_growth
   - id: task3
     name: Aggressive Optimization
     difficulty: hard
     grader: env.tasks:grade_task3
-    score_range: [0.01, 0.99]
+    score_range: [0.0, 1.0]
+    config:
+      seed: 44
+      profile: aggressive
+      goal: aggressive_optimization
+
+grading:
+  overall_score: env.tasks:run_all_tasks
 
 inference:
   script: inference.py
@@ -87,4 +102,4 @@ inference:
   output_format:
     - "[START] task=<task_name> env=<benchmark> model=<model_name>"
     - "[STEP] step=<n> action=<action_str> reward=<0.00> done=<true|false> error=<msg|null>"
-    - "[END] success=<true|false> steps=<n> rewards=<r1,r2,...,rn>"
+    - "[END] success=<true|false> steps=<n> score=<0.000> rewards=<r1,r2,...,rn>"

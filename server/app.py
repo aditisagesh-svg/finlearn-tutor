@@ -1,201 +1,148 @@
 """
-FastAPI server for FinLearn Tutor — OpenEnv validator compatible.
-Exposes: GET /health, GET /, POST /reset, GET /tasks, POST /grader
-All endpoints are crash-proof: import failures return safe fallback responses.
+OpenEnv-compliant FastAPI server for FinLearn Tutor.
+Exposes: /health, /tasks, /reset, /run
 """
-
 from __future__ import annotations
 
-import math
-from typing import Any, Dict, Optional
+from threading import Lock
+from typing import Dict, Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-# ── Safe environment import ───────────────────────────────────────────────────
-try:
-    from env.environment import FinLearnEnv
-    _ENV_OK = True
-except Exception:
-    _ENV_OK = False
-    FinLearnEnv = None  # type: ignore
+from env.environment import FinLearnEnv
+from env.models import Action
+from env.tasks import grade_task1, grade_task2, grade_task3
 
-# ── Safe grader import ────────────────────────────────────────────────────────
-try:
-    from env.tasks import grade_task1, grade_task2, grade_task3, run_all_tasks
-    _GRADERS_OK = True
-except Exception:
-    _GRADERS_OK = False
+app = FastAPI(title="FinLearn Tutor API")
 
-    def grade_task1(final_state=None, initial_value=1000.0, trajectory=None) -> float:
-        return 0.50
+_envs: Dict[str, FinLearnEnv] = {}
+_env_lock = Lock()
 
-    def grade_task2(final_state=None, initial_value=1000.0, trajectory=None) -> float:
-        return 0.50
-
-    def grade_task3(final_state=None, initial_value=1000.0, trajectory=None) -> float:
-        return 0.50
-
-    def run_all_tasks(final_state=None, initial_value=1000.0, trajectory=None) -> Dict:
-        return {"task1": 0.50, "task2": 0.50, "task3": 0.50, "overall_score": 0.50}
-
-
-# ── Task registry (IDs match openenv.yaml exactly) ────────────────────────────
-TASK_REGISTRY = {
-    "task1": {
-        "id": "task1",
+TASKS = [
+    {
+        "task_id": "task1",
         "name": "Capital Preservation",
         "difficulty": "easy",
-        "grader": "env.tasks:grade_task1",
-        "score_range": [0.01, 0.99],
-        "fn": grade_task1,
+        "description": "Protect capital through drawdowns. Minimize max drawdown and volatility.",
+        "max_steps": 30,
     },
-    "task2": {
-        "id": "task2",
+    {
+        "task_id": "task2",
         "name": "Balanced Growth",
         "difficulty": "medium",
-        "grader": "env.tasks:grade_task2",
-        "score_range": [0.01, 0.99],
-        "fn": grade_task2,
+        "description": "Achieve stable growth with diversification across all three assets.",
+        "max_steps": 30,
     },
-    "task3": {
-        "id": "task3",
+    {
+        "task_id": "task3",
         "name": "Aggressive Optimization",
         "difficulty": "hard",
-        "grader": "env.tasks:grade_task3",
-        "score_range": [0.01, 0.99],
-        "fn": grade_task3,
+        "description": "Maximize portfolio returns while keeping drawdown below threshold.",
+        "max_steps": 30,
     },
+]
+
+GRADERS = {
+    "task1": grade_task1,
+    "task2": grade_task2,
+    "task3": grade_task3,
 }
 
 
-def _safe_score(x: float) -> float:
-    try:
-        v = float(x)
-        if math.isnan(v) or math.isinf(v):
-            return 0.50
-        return round(max(0.01, min(0.99, v)), 2)
-    except Exception:
-        return 0.50
-
-
-# ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="FinLearn Tutor", version="1.1.0")
-
-_env = None
-
-
-def _get_env():
-    global _env
-    if _env is None and _ENV_OK:
-        try:
-            _env = FinLearnEnv(max_steps=30, seed=42)
-            _env.reset()
-        except Exception:
-            pass
-    return _env
-
-
-# ── Health / root ─────────────────────────────────────────────────────────────
-
 @app.get("/")
-def root():
+def root() -> dict:
     return {"status": "ok", "service": "finlearn-tutor"}
 
 
 @app.get("/health")
-def health():
-    return {"status": "ok"}
+def health() -> dict:
+    return {"status": "ok", "service": "finlearn-tutor", "version": "1.1.0"}
 
-
-# ── Reset ─────────────────────────────────────────────────────────────────────
-
-@app.post("/reset")
-def reset():
-    global _env
-    try:
-        if _ENV_OK:
-            _env = FinLearnEnv(max_steps=30, seed=42)
-            observation = _env.reset()
-            return {"observation": observation.model_dump(), "done": False}
-    except Exception:
-        pass
-    return {"observation": {}, "done": False}
-
-
-# ── Tasks ─────────────────────────────────────────────────────────────────────
 
 @app.get("/tasks")
-def list_tasks():
-    tasks = [
-        {
-            "id": meta["id"],
-            "name": meta["name"],
-            "difficulty": meta["difficulty"],
-            "grader": meta["grader"],
-            "score_range": meta["score_range"],
-        }
-        for meta in TASK_REGISTRY.values()
-    ]
-    return {"tasks": tasks, "count": len(tasks)}
+def list_tasks() -> dict:
+    return {"tasks": TASKS}
 
 
-# ── Grader ────────────────────────────────────────────────────────────────────
-
-class GraderRequest(BaseModel):
-    task_id: str
-    final_state: Optional[Dict[str, Any]] = None
-    observation: Optional[Dict[str, Any]] = None
-    initial_value: Optional[float] = 1000.0
-    trajectory: Optional[Dict[str, Any]] = None
-
-    def state_payload(self) -> Dict[str, Any]:
-        return self.final_state or self.observation or {}
+class ResetRequest(BaseModel):
+    task_id: str = "task1"
+    seed: Optional[int] = 42
+    max_steps: Optional[int] = 30
 
 
-@app.post("/grader")
-def run_grader(request: GraderRequest):
-    task_id = request.task_id
-    if task_id not in TASK_REGISTRY:
-        return {"task_id": task_id, "score": 0.05, "error": f"unknown task_id: {task_id}"}
+@app.post("/reset")
+def reset(req: ResetRequest) -> dict:
+    if req.task_id not in GRADERS:
+        raise HTTPException(status_code=400, detail=f"Unknown task_id: {req.task_id}")
 
-    try:
-        initial_value = request.initial_value if request.initial_value is not None else 1000.0
-        raw = TASK_REGISTRY[task_id]["fn"](
-            final_state=request.state_payload(),
-            initial_value=initial_value,
-            trajectory=request.trajectory or {},
-        )
-        score = _safe_score(raw)
-    except Exception:
-        score = 0.05
+    max_steps = req.max_steps if req.max_steps is not None else 30
+    seed = req.seed if req.seed is not None else 42
+    env = FinLearnEnv(max_steps=max_steps, seed=seed)
+    with _env_lock:
+        _envs[req.task_id] = env
 
+    observation = env.state()
     return {
-        "task_id": task_id,
-        "score": score,
-        "score_range": TASK_REGISTRY[task_id]["score_range"],
+        "task_id": req.task_id,
+        "observation": observation.model_dump(),
+        "done": False,
+        "info": {"step": 0, "max_steps": max_steps},
+        "config": {
+            "seed": seed,
+            "max_steps": max_steps,
+            "initial_cash": 1000.0,
+            "trade_amount": 100.0,
+        },
     }
 
 
-@app.post("/grade_all")
-def grade_all(request: GraderRequest):
-    try:
-        initial_value = request.initial_value if request.initial_value is not None else 1000.0
-        result = run_all_tasks(
-            final_state=request.state_payload(),
-            initial_value=initial_value,
-            trajectory=request.trajectory or {},
+class RunRequest(BaseModel):
+    task_id: str = "task1"
+    action: Optional[int] = None
+    action_id: Optional[int] = None
+
+    def resolved_action(self) -> int:
+        if self.action is not None:
+            return self.action
+        if self.action_id is not None:
+            return self.action_id
+        raise ValueError("action is required")
+
+
+@app.post("/run")
+def run_step(req: RunRequest) -> dict:
+    if req.task_id not in GRADERS:
+        raise HTTPException(status_code=400, detail=f"Unknown task_id: {req.task_id}")
+
+    with _env_lock:
+        env = _envs.get(req.task_id)
+
+    if env is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No active session for task_id '{req.task_id}'. Call /reset first.",
         )
-        return {k: _safe_score(v) if isinstance(v, (int, float)) else v for k, v in result.items()}
-    except Exception:
-        return {"task1": 0.05, "task2": 0.05, "task3": 0.05, "overall_score": 0.05}
 
+    try:
+        action = req.resolved_action()
+        observation, reward, done, info = env.step(Action(action_id=action))
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
-def main() -> None:
-    import uvicorn
+    score = None
+    if done:
+        grader = GRADERS[req.task_id]
+        result = grader(observation, trajectory=env.get_episode_summary())
+        score = round(max(0.0, min(float(result), 1.0)), 4)
+        with _env_lock:
+            _envs.pop(req.task_id, None)
 
-    uvicorn.run("server.app:app", host="0.0.0.0", port=7860, reload=False)
-
-
-if __name__ == "__main__":
-    main()
+    return {
+        "task_id": req.task_id,
+        "observation": observation.model_dump(),
+        "reward": reward.value,
+        "done": done,
+        "score": score,
+        "info": info,
+    }
