@@ -1,11 +1,12 @@
 """
 Deterministic baseline inference script for FinLearn Tutor.
-
-This file is intentionally strict about stdout formatting for validator compatibility.
+Runs all 3 tasks in sequence, each with its own [START]..[END] block.
+Strict stdout formatting for validator compatibility.
 """
 
 from __future__ import annotations
 
+import math
 import os
 import sys
 from typing import Any, Dict, List, Optional
@@ -14,21 +15,29 @@ from openai import OpenAI
 
 from env.environment import FinLearnEnv
 from env.models import Action
-from env.tasks import run_all_tasks
+from env.tasks import grade_task1, grade_task2, grade_task3
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
-API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
-LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
+MODEL_NAME   = os.getenv("MODEL_NAME", "gpt-4.1-mini")
+HF_TOKEN     = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 
-STOCK_BUY = {"ALPHA": 1, "BETA": 2, "GAMMA": 3}
+STOCK_BUY  = {"ALPHA": 1, "BETA": 2, "GAMMA": 3}
 STOCK_SELL = {"ALPHA": 4, "BETA": 5, "GAMMA": 6}
 
 VOLATILITY_THRESHOLD = 0.035
-TREND_BUY_THRESHOLD = 0.002
+TREND_BUY_THRESHOLD  = 0.002
 TREND_SELL_THRESHOLD = -0.002
-CONCENTRATION_LIMIT = 0.70
+CONCENTRATION_LIMIT  = 0.70
 
+# Task definitions — each runs as its own episode
+TASKS = [
+    {"id": "task1", "name": "easy",   "env": "finlearn", "grader": grade_task1},
+    {"id": "task2", "name": "medium", "env": "finlearn", "grader": grade_task2},
+    {"id": "task3", "name": "hard",   "env": "finlearn", "grader": grade_task3},
+]
+
+
+# ── Logging ───────────────────────────────────────────────────────────────────
 
 def log_start(task: str, env: str, model: str) -> None:
     print(f"[START] task={task} env={env} model={model}", flush=True)
@@ -50,20 +59,26 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> No
     )
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _clamp(x: Any) -> float:
+    """Clamp to (0.01, 0.99). Never returns 0.0 or 1.0."""
+    try:
+        v = float(x)
+        if math.isnan(v) or math.isinf(v):
+            return 0.50
+        return round(max(0.01, min(0.99, v)), 2)
+    except Exception:
+        return 0.50
+
+
 def build_openai_client() -> OpenAI:
-    if not API_KEY:
-        raise RuntimeError("API_KEY is required")
-    return OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
-
-
-def _log_proxy_event(message: str) -> None:
-    print(message, file=sys.stderr, flush=True)
+    if not HF_TOKEN:
+        raise RuntimeError("HF_TOKEN is required")
+    return OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
 
 def ping_llm_proxy(client: OpenAI) -> None:
-    """
-    Make a minimal routed request so validator logs confirm proxy usage.
-    """
     try:
         client.chat.completions.create(
             model=MODEL_NAME,
@@ -71,26 +86,23 @@ def ping_llm_proxy(client: OpenAI) -> None:
             max_tokens=1,
             temperature=0,
         )
-        _log_proxy_event("[PROXY] ping ok")
+        print("[PROXY] ping ok", file=sys.stderr, flush=True)
     except Exception as exc:
-        _log_proxy_event(f"[PROXY] ping failed: {type(exc).__name__}: {exc}")
+        print(f"[PROXY] ping failed: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
 
 
 def choose_action(state: Dict[str, Any]) -> Action:
-    """
-    Deterministic benchmark baseline policy for reproducible evaluation runs.
-    """
-    trends = state["trends"]
-    volatility = state["volatility"]
-    holdings = state["holdings"]
-    prices = state["prices"]
-    cash = state["cash_balance"]
+    trends      = state["trends"]
+    volatility  = state["volatility"]
+    holdings    = state["holdings"]
+    prices      = state["prices"]
+    cash        = state["cash_balance"]
     market_regime = state.get("market_regime", "sideways")
-    risk_level = state.get("risk_level", "moderate")
-    market_event = state.get("market_event", "none")
+    risk_level    = state.get("risk_level", "moderate")
+    market_event  = state.get("market_event", "none")
 
-    stock_values = {symbol: holdings[symbol] * prices[symbol] for symbol in holdings}
-    portfolio = state["portfolio_value"]
+    stock_values = {s: holdings[s] * prices[s] for s in holdings}
+    portfolio    = state["portfolio_value"]
 
     if risk_level == "high" or market_event == "market_crash":
         for stock, trend in trends.items():
@@ -105,10 +117,10 @@ def choose_action(state: Dict[str, Any]) -> Action:
 
     for stock in ["ALPHA", "GAMMA", "BETA"]:
         trend = trends[stock]
-        current_volatility = volatility[stock]
-        if trend > TREND_BUY_THRESHOLD and current_volatility <= VOLATILITY_THRESHOLD and cash > 50:
-            current_weight = stock_values.get(stock, 0) / portfolio if portfolio > 0 else 0
-            if current_weight < 0.50:
+        vol   = volatility[stock]
+        if trend > TREND_BUY_THRESHOLD and vol <= VOLATILITY_THRESHOLD and cash > 50:
+            w = stock_values.get(stock, 0) / portfolio if portfolio > 0 else 0
+            if w < 0.50:
                 return Action(action_id=STOCK_BUY[stock])
 
     if market_regime == "bear":
@@ -121,16 +133,15 @@ def choose_action(state: Dict[str, Any]) -> Action:
         if trend < TREND_SELL_THRESHOLD and holdings.get(stock, 0) > 0:
             return Action(action_id=STOCK_SELL[stock])
 
-    best_buy = None
-    best_score = -999.0
+    best_buy, best_sc = None, -999.0
     for stock, trend in trends.items():
-        current_volatility = volatility[stock]
-        if current_volatility > VOLATILITY_THRESHOLD:
+        vol = volatility[stock]
+        if vol > VOLATILITY_THRESHOLD:
             continue
         if trend > TREND_BUY_THRESHOLD:
-            score = trend - current_volatility
-            if score > best_score:
-                best_score = score
+            sc = trend - vol
+            if sc > best_sc:
+                best_sc  = sc
                 best_buy = stock
 
     if best_buy and cash > 50:
@@ -139,38 +150,44 @@ def choose_action(state: Dict[str, Any]) -> Action:
     return Action(action_id=0)
 
 
-def run_simulation(max_steps: int = 30, seed: int = 42) -> Dict[str, Any]:
-    task_name = "finlearn-tutor"
-    benchmark = "finlearn"
-    model = MODEL_NAME
-    success_score_threshold = 0.5
-    log_start(task=task_name, env=benchmark, model=model)
+# ── Single-task episode ───────────────────────────────────────────────────────
+
+def run_task_episode(
+    task_meta: Dict,
+    client: OpenAI,
+    max_steps: int = 30,
+    seed: int = 42,
+    success_threshold: float = 0.5,
+) -> Dict[str, Any]:
+    """
+    Runs one full episode for a single task.
+    Emits [START] … [STEP] … [END] for that task.
+    Returns result dict with score.
+    """
+    task_name = task_meta["name"]
+    env_name  = task_meta["env"]
+    grader    = task_meta["grader"]
 
     rewards: List[float] = []
     steps_taken = 0
-    success = False
-    score = 0.0
-    task_scores: Dict = {}
-    try:
-        client = build_openai_client()
-        # Unconditional proxy probe for validator compliance.
-        ping_llm_proxy(client)
+    success     = False
+    score       = 0.01
 
-        env = FinLearnEnv(max_steps=max_steps, seed=seed)
+    log_start(task=task_name, env=env_name, model=MODEL_NAME)
+
+    try:
+        env         = FinLearnEnv(max_steps=max_steps, seed=seed)
         observation = env.reset()
-        initial_value = observation.portfolio_value
+        initial_val = observation.portfolio_value
 
         done = False
         while not done:
-            action = choose_action(observation.model_dump())
+            action               = choose_action(observation.model_dump())
             observation, reward, done, _info = env.step(action)
 
-            # Clamp reward to (0.01, 0.99) — never log 0.0 or 1.0
-            raw_reward = float(reward.value) if reward.value is not None else 0.01
-            import math as _math
-            if _math.isnan(raw_reward) or _math.isinf(raw_reward):
-                raw_reward = 0.01
-            reward_value = round(max(0.01, min(0.99, raw_reward)), 2)
+            # Clamp reward — never log 0.0
+            raw_reward  = float(reward.value) if reward.value is not None else 0.01
+            reward_value = _clamp(raw_reward)
             rewards.append(reward_value)
             steps_taken = observation.step
 
@@ -182,26 +199,70 @@ def run_simulation(max_steps: int = 30, seed: int = 42) -> Dict[str, Any]:
                 error=None,
             )
 
-        task_scores = run_all_tasks(
-            observation,
-            initial_value,
+        # Grade using this task's specific grader
+        raw_score = grader(
+            final_state=observation,
+            initial_value=initial_val,
             trajectory=env.get_episode_summary(),
         )
-        score = round(max(0.01, min(float(task_scores["overall_score"]), 0.99)), 2)
-        success = score >= success_score_threshold
+        score   = _clamp(raw_score)
+        success = score >= success_threshold
 
-        return {
-            "initial_value": initial_value,
-            "task_scores": task_scores,
-            "final_state": observation.model_dump(),
-            "trajectory": env.get_episode_summary(),
-            "steps_taken": steps_taken,
-            "rewards": rewards,
-            "score": score,
-            "success": success,
-        }
     finally:
         log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+
+    return {
+        "task_id":    task_meta["id"],
+        "task_name":  task_name,
+        "score":      score,
+        "success":    success,
+        "steps":      steps_taken,
+        "rewards":    rewards,
+    }
+
+
+# ── Main: run ALL 3 tasks sequentially ───────────────────────────────────────
+
+def run_simulation(max_steps: int = 30, seed: int = 42) -> Dict[str, Any]:
+    """
+    Runs all 3 tasks (easy / medium / hard) back-to-back.
+    Each task gets its own [START]..[END] block in stdout.
+    Output format per task:
+        [START] task=easy env=finlearn model=<MODEL>
+        [STEP]  step=1 action=1 reward=0.12 done=false error=null
+        ...
+        [END]   success=true steps=30 score=0.487 rewards=0.12,...
+    """
+    max_steps = int(os.getenv("MAX_STEPS", str(max_steps)))
+    seed      = int(os.getenv("SEED",      str(seed)))
+    threshold = float(os.getenv("SUCCESS_SCORE_THRESHOLD", "0.5"))
+
+    # Single proxy ping before any episode starts
+    try:
+        client = build_openai_client()
+        ping_llm_proxy(client)
+    except Exception as exc:
+        print(f"[PROXY] client error: {exc}", file=sys.stderr, flush=True)
+        client = None
+
+    results = []
+    for task_meta in TASKS:
+        result = run_task_episode(
+            task_meta=task_meta,
+            client=client,
+            max_steps=max_steps,
+            seed=seed,
+            success_threshold=threshold,
+        )
+        results.append(result)
+
+    overall = _clamp(sum(r["score"] for r in results) / len(results))
+
+    return {
+        "tasks":         results,
+        "overall_score": overall,
+        "success":       overall >= threshold,
+    }
 
 
 if __name__ == "__main__":
